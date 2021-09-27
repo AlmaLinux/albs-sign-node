@@ -27,7 +27,7 @@ def init_gpg():
     gnupg.GPG
         Initialized gpg wrapper.
     """
-    gpg = gnupg.GPG(binary='/usr/bin/gpg2',
+    gpg = gnupg.GPG(gpgbinary='/usr/bin/gpg2',
                     keyring='/home/alt/.gnupg/pubring.kbx')
     return gpg
 
