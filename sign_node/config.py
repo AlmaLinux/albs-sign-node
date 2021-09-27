@@ -13,7 +13,7 @@ from .errors import ConfigurationError
 from .utils.config import BaseConfig
 from .utils.file_utils import normalize_path
 
-__all__ = ['BuildsSignNodeConfig']
+__all__ = ['SignNodeConfig']
 
 
 DEFAULT_PULP_HOST = 'http://pulp'
