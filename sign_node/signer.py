@@ -29,7 +29,7 @@ __all__ = ['Signer']
 
 class Signer(object):
 
-    def __init__(self, config, password_db, gpg, zmq_context):
+    def __init__(self, config, password_db, gpg):
         self.__config = config
         self.__password_db = password_db
         self.__gpg = gpg
@@ -60,8 +60,8 @@ class Signer(object):
                     logging.info(msg)
                     self.__call_master('sign_task_completed', task_id=task['id'], msg=msg)
                     continue
-        finally:
-            self.__zmq_socket.close(linger=0)
+        except Exception as e:
+            logging.debug(f"Couldn't receive task from web_server: {e}")
 
     def _sign_build(self, task):
         """
