@@ -9,13 +9,17 @@ from __future__ import division
 import json
 import requests
 
-__all__ = ['cln_get_install_count', 'cln_get_systemid_list',
-           'cln_get_centos_els', 'cln_get_cl7_hybrid', 'imunify_get_ip_list',
-           'ClnApiError']
+__all__ = [
+    "cln_get_install_count",
+    "cln_get_systemid_list",
+    "cln_get_centos_els",
+    "cln_get_cl7_hybrid",
+    "imunify_get_ip_list",
+    "ClnApiError",
+]
 
 
 class ClnApiError(Exception):
-
     def __init__(self, message, status_code, text):
         super(ClnApiError, self).__init__(message)
         self.status_code = status_code
@@ -44,20 +48,25 @@ def cln_get_install_count(auth_token, package_name):
     ClnApiError
         If API call failed.
     """
-    rsp = requests.get('https://cln.cloudlinux.com/api/cln/check/rpms',
-                       params={"name": package_name, "cutOf": "10-JAN-10",
-                               "authToken": auth_token})
+    rsp = requests.get(
+        "https://cln.cloudlinux.com/api/cln/check/rpms",
+        params={"name": package_name, "cutOf": "10-JAN-10", "authToken": auth_token},
+    )
     if rsp.status_code != 200:
-        raise ClnApiError('HTTP request failed', rsp.status_code, rsp.text)
+        raise ClnApiError("HTTP request failed", rsp.status_code, rsp.text)
     try:
         j = json.loads(rsp.text)
     except ValueError as e:
-        raise ClnApiError('cannot decode JSON reply: {0}'.format(str(e)),
-                          rsp.status_code, rsp.text)
-    if j['success'] is not True:
-        raise ClnApiError('CLN API call failed: {0}'.format(j.get('message')),
-                          rsp.status_code, rsp.text)
-    return j.get('data', [])
+        raise ClnApiError(
+            "cannot decode JSON reply: {0}".format(str(e)), rsp.status_code, rsp.text
+        )
+    if j["success"] is not True:
+        raise ClnApiError(
+            "CLN API call failed: {0}".format(j.get("message")),
+            rsp.status_code,
+            rsp.text,
+        )
+    return j.get("data", [])
 
 
 def cln_get_systemid_list(auth_token):
@@ -82,9 +91,9 @@ def cln_get_systemid_list(auth_token):
         If API call failed.
     """
     response = requests.get(
-        'https://cln.cloudlinux.com'
-        '/cln/api/clos/company-wide/server/primary-channel',
-        params={'api_token': auth_token}
+        "https://cln.cloudlinux.com"
+        "/cln/api/clos/company-wide/server/primary-channel",
+        params={"api_token": auth_token},
     )
     response.raise_for_status()
     return response.json()
@@ -92,9 +101,9 @@ def cln_get_systemid_list(auth_token):
 
 def cln_get_centos_els(auth_token):
     response = requests.get(
-        'https://cln.cloudlinux.com'
-        '/cln/api/els/internal/server/CELS/token/list',
-        params={'api_token': auth_token})
+        "https://cln.cloudlinux.com" "/cln/api/els/internal/server/CELS/token/list",
+        params={"api_token": auth_token},
+    )
     response.raise_for_status()
     return response.json()
 
@@ -124,35 +133,40 @@ def imunify_get_ip_list(auth_token):
         If API call failed.
     """
     response = requests.get(
-        'https://api.imunify360.com/api/rollout/ips',
-        params={'format': 'json'},
-        headers={'X-APIToken': auth_token})
+        "https://api.imunify360.com/api/rollout/ips",
+        params={"format": "json"},
+        headers={"X-APIToken": auth_token},
+    )
     if response.status_code != 200:
-        raise ClnApiError('HTTP request failed', response.status_code,
-                          response.text)
+        raise ClnApiError("HTTP request failed", response.status_code, response.text)
     try:
         json_response = response.json()
     except ValueError as e:
-        raise ClnApiError('cannot decode JSON reply: {0}'.format(str(e)),
-                          response.status_code, response.text)
-    return json_response.get('result', [])
+        raise ClnApiError(
+            "cannot decode JSON reply: {0}".format(str(e)),
+            response.status_code,
+            response.text,
+        )
+    return json_response.get("result", [])
 
 
 def cln_get_cl7_hybrid(auth_token):
     response = requests.get(
-        'https://redash.corp.cloudlinux.com/api/queries/578/results.json',
-        params={'api_key': auth_token})
+        "https://redash.corp.cloudlinux.com/api/queries/578/results.json",
+        params={"api_key": auth_token},
+    )
     if response.status_code != 200:
-        raise ClnApiError('HTTP request failed', response.status_code,
-                          response.text)
+        raise ClnApiError("HTTP request failed", response.status_code, response.text)
     try:
         json_response = response.json()
     except ValueError as e:
-        raise ClnApiError('cannot decode JSON reply: {0}'.format(
-            str(e)), response.status_code, response.text)
+        raise ClnApiError(
+            "cannot decode JSON reply: {0}".format(str(e)),
+            response.status_code,
+            response.text,
+        )
     response = []
-    for item in json_response.get(
-            'query_result', {}).get('data', {}).get('rows', []):
-        item['server_id'] = int(item['server_id'])
+    for item in json_response.get("query_result", {}).get("data", {}).get("rows", []):
+        item["server_id"] = int(item["server_id"])
         response.append(item)
     return response

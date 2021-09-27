@@ -15,7 +15,8 @@ import hashlib
 
 # noinspection PyPackageRequirements
 import gi
-gi.require_version('Modulemd', '2.0')
+
+gi.require_version("Modulemd", "2.0")
 # noinspection PyPackageRequirements,PyUnresolvedReferences
 from gi.repository import Modulemd
 
@@ -24,15 +25,17 @@ from castor.utils.file_utils import is_gzip_file
 from castor.ported import to_unicode
 
 
-__all__ = ['generate_stream_version',
-           'get_stream_build_deps',
-           'get_stream_runtime_deps',
-           'calc_stream_build_context',
-           'calc_stream_runtime_context',
-           'calc_stream_context',
-           'calc_stream_dist_macro',
-           'is_modular_platform',
-           'ModuleTemplateWrapper']
+__all__ = [
+    "generate_stream_version",
+    "get_stream_build_deps",
+    "get_stream_runtime_deps",
+    "calc_stream_build_context",
+    "calc_stream_runtime_context",
+    "calc_stream_context",
+    "calc_stream_dist_macro",
+    "is_modular_platform",
+    "ModuleTemplateWrapper",
+]
 
 
 def generate_stream_version(platform):
@@ -54,12 +57,13 @@ def generate_stream_version(platform):
     castor.errors.DataNotFoundError
         If a build platform has no module_version_prefix defined.
     """
-    prefix = platform.get('modularity',
-                          {}).get('platform', {}).get('module_version_prefix')
+    prefix = (
+        platform.get("modularity", {}).get("platform", {}).get("module_version_prefix")
+    )
     if not prefix:
-        raise DataNotFoundError('module_version_prefix is not defined')
-    ts = datetime.datetime.utcnow().strftime('%Y%m%d%H%M%S')
-    return int('{0}{1}'.format(prefix, ts))
+        raise DataNotFoundError("module_version_prefix is not defined")
+    ts = datetime.datetime.utcnow().strftime("%Y%m%d%H%M%S")
+    return int("{0}{1}".format(prefix, ts))
 
 
 def get_stream_build_deps(stream):
@@ -86,7 +90,7 @@ def get_stream_build_deps(stream):
     # xmd['mbs']['buildrequires'] section first
     xmd = stream.get_xmd()
     if xmd:
-        build_deps = xmd.get('mbs', {}).get('buildrequires')
+        build_deps = xmd.get("mbs", {}).get("buildrequires")
         if build_deps:
             return build_deps
     # convert dependencies['buildrequires'] to the xmd-like format
@@ -94,9 +98,9 @@ def get_stream_build_deps(stream):
         for name in deps.get_buildtime_modules():
             streams = deps.get_buildtime_streams(name)
             if len(streams) > 1:
-                raise ValueError('multiple stream versions are not supported')
+                raise ValueError("multiple stream versions are not supported")
             if streams:
-                build_deps[name] = {'stream': streams[0]}
+                build_deps[name] = {"stream": streams[0]}
     return build_deps
 
 
@@ -136,9 +140,9 @@ def calc_stream_build_context(build_deps):
     str
         Module stream's build requirements context hash.
     """
-    requires = {name: info['stream'] for name, info in build_deps.items()}
+    requires = {name: info["stream"] for name, info in build_deps.items()}
     js = json.dumps(collections.OrderedDict(sorted(requires.items())))
-    return hashlib.sha1(js.encode('utf-8')).hexdigest()
+    return hashlib.sha1(js.encode("utf-8")).hexdigest()
 
 
 def calc_stream_runtime_context(runtime_deps):
@@ -155,10 +159,9 @@ def calc_stream_runtime_context(runtime_deps):
     str
         Module stream's runtime dependencies context hash.
     """
-    requires = {dep: sorted(list(streams))
-                for dep, streams in runtime_deps.items()}
+    requires = {dep: sorted(list(streams)) for dep, streams in runtime_deps.items()}
     js = json.dumps(collections.OrderedDict(sorted(requires.items())))
-    return hashlib.sha1(js.encode('utf-8')).hexdigest()
+    return hashlib.sha1(js.encode("utf-8")).hexdigest()
 
 
 def calc_stream_context(stream):
@@ -179,8 +182,8 @@ def calc_stream_context(stream):
     build_context = calc_stream_build_context(build_deps)
     runtime_deps = get_stream_runtime_deps(stream)
     runtime_context = calc_stream_runtime_context(runtime_deps)
-    hashes = '{0}:{1}'.format(build_context, runtime_context)
-    return hashlib.sha1(hashes.encode('utf-8')).hexdigest()[:8]
+    hashes = "{0}:{1}".format(build_context, runtime_context)
+    return hashlib.sha1(hashes.encode("utf-8")).hexdigest()[:8]
 
 
 def calc_stream_dist_macro(stream, platform, build_index=None, template=False):
@@ -204,17 +207,21 @@ def calc_stream_dist_macro(stream, platform, build_index=None, template=False):
     str
         Modular package %{dist} macros value.
     """
-    dist_str = '.'.join([stream.get_module_name(),
-                         stream.get_stream_name(),
-                         str(stream.get_version()),
-                         str(stream.get_context())]).encode('utf-8')
+    dist_str = ".".join(
+        [
+            stream.get_module_name(),
+            stream.get_stream_name(),
+            str(stream.get_version()),
+            str(stream.get_context()),
+        ]
+    ).encode("utf-8")
     dist_hash = hashlib.sha1(dist_str).hexdigest()[:8]
-    prefix = platform['modularity']['platform']['dist_tag_prefix']
+    prefix = platform["modularity"]["platform"]["dist_tag_prefix"]
     if template:
-        return '.module_{prefix}+${{BUILD_INDEX}}+{dist_hash}'.format(
+        return ".module_{prefix}+${{BUILD_INDEX}}+{dist_hash}".format(
             prefix=prefix, dist_hash=dist_hash
         )
-    return '.module_{prefix}+{build_index}+{dist_hash}'.format(
+    return ".module_{prefix}+{build_index}+{dist_hash}".format(
         prefix=prefix, build_index=build_index, dist_hash=dist_hash
     )
 
@@ -233,7 +240,7 @@ def is_modular_platform(platform):
     bool
         True if a build platform supports modularity, False otherwise.
     """
-    return 'modularity' in platform
+    return "modularity" in platform
 
 
 def create_defaults(module_name):
@@ -287,23 +294,24 @@ def extract_stream_metadata(module, stream):
     dict
     """
     response = {
-        'name': stream.get_module_name(),
-        'stream': stream.get_stream_name(),
-        'arch': stream.get_arch(),
-        'version': stream.get_version(),
-        'context': stream.get_context(),
-        'summary': stream.get_summary(),
-        'is_default_stream': False,
-        'default_profiles': [],
-        'yaml_template': dump_stream_to_yaml(stream)
+        "name": stream.get_module_name(),
+        "stream": stream.get_stream_name(),
+        "arch": stream.get_arch(),
+        "version": stream.get_version(),
+        "context": stream.get_context(),
+        "summary": stream.get_summary(),
+        "is_default_stream": False,
+        "default_profiles": [],
+        "yaml_template": dump_stream_to_yaml(stream),
     }
     defaults = module.get_defaults()
     if not defaults:
         return response
     default_stream = defaults.get_default_stream()
-    response['is_default_stream'] = stream.get_stream_name() == default_stream
-    response['default_profiles'] = defaults.get_default_profiles_for_stream(
-        stream.get_stream_name())
+    response["is_default_stream"] = stream.get_stream_name() == default_stream
+    response["default_profiles"] = defaults.get_default_profiles_for_stream(
+        stream.get_stream_name()
+    )
     return response
 
 
@@ -324,19 +332,20 @@ def module_from_file(file_path, module_name=None, module_stream=None):
     file_open = open
     if is_gzip_file(file_path):
         file_open = gzip.open
-    with file_open(file_path, 'rb') as fd:
+    with file_open(file_path, "rb") as fd:
         template = fd.read()
     template = to_unicode(template)
     modules_idx = Modulemd.ModuleIndex.new()
     if module_name is None:
         ret, failures = modules_idx.update_from_string(template, strict=True)
         if not ret:
-            raise DataSchemaError('can not parse modules.yaml template')
+            raise DataSchemaError("can not parse modules.yaml template")
     else:
         stream = Modulemd.ModuleStreamV2.read_string(
-            template, True, module_name, module_stream)
+            template, True, module_name, module_stream
+        )
         if not stream:
-            raise DataSchemaError('can not parse modules.yaml template')
+            raise DataSchemaError("can not parse modules.yaml template")
         modules_idx.add_module_stream(stream)
     return modules_idx
 
@@ -364,9 +373,7 @@ def merge_modules(modules_a, modules_b):
 
 
 class RpmArtifact:
-
-    def __init__(self, name, version, release, source=None,
-                 epoch=None, arch=None):
+    def __init__(self, name, version, release, source=None, epoch=None, arch=None):
         self._name = name
         self._version = version
         self._release = release
@@ -375,16 +382,16 @@ class RpmArtifact:
         self._arch = arch
 
     def as_ref(self):
-        return f'{self.name}-{self.version}-{self.release}'
+        return f"{self.name}-{self.version}-{self.release}"
 
     def as_artifact(self):
         if self._source is not None:
             return self._source
-        epoch = self._epoch if self._epoch else '0'
-        return f'{self.name}-{epoch}:{self.version}-{self.release}.{self.arch}'
+        epoch = self._epoch if self._epoch else "0"
+        return f"{self.name}-{epoch}:{self.version}-{self.release}.{self.arch}"
 
     def as_src_rpm(self):
-        return f'{self.name}-{self.version}-{self.release}.src.rpm'
+        return f"{self.name}-{self.version}-{self.release}.src.rpm"
 
     @staticmethod
     def from_str(artifact):
@@ -402,11 +409,11 @@ class RpmArtifact:
             Parsed package metadata or None.
         """
         regex = re.compile(
-            r'^(?P<name>[\w+-.]+)-'
-            r'((?P<epoch>\d+):)?'
-            r'(?P<version>\d+?[\w.]*)-'
-            r'(?P<release>\d+?[\w.+]*?)'
-            r'\.(?P<arch>(i686)|(noarch)|(x86_64)|(aarch64)|(src))(\.rpm)?$'
+            r"^(?P<name>[\w+-.]+)-"
+            r"((?P<epoch>\d+):)?"
+            r"(?P<version>\d+?[\w.]*)-"
+            r"(?P<release>\d+?[\w.+]*?)"
+            r"\.(?P<arch>(i686)|(noarch)|(x86_64)|(aarch64)|(src))(\.rpm)?$"
         )
         result = re.search(regex, artifact)
         if not result:
@@ -441,8 +448,15 @@ class ModuleTemplateWrapper(object):
 
     """Provides common functions for manipulating modules.yaml templates."""
 
-    def __init__(self, template, module_name, stream_name,
-                 stream_version=None, stream_context=None, stream_arch=None):
+    def __init__(
+        self,
+        template,
+        module_name,
+        stream_name,
+        stream_version=None,
+        stream_context=None,
+        stream_arch=None,
+    ):
         """
         Parameters
         ----------
@@ -470,44 +484,62 @@ class ModuleTemplateWrapper(object):
         """
         self._template = to_unicode(template)
         self._modules_idx = Modulemd.ModuleIndex.new()
-        ret, failures = self._modules_idx.update_from_string(self._template,
-                                                             strict=True)
+        ret, failures = self._modules_idx.update_from_string(
+            self._template, strict=True
+        )
         if not ret:
-            raise DataSchemaError('can not parse modules.yaml template')
+            raise DataSchemaError("can not parse modules.yaml template")
         self._module = self._modules_idx.get_module(module_name)
         if not self._module:
-            raise DataNotFoundError(f'module {module_name} is not found')
+            raise DataNotFoundError(f"module {module_name} is not found")
         if stream_version is None:
             self.stream = self._get_stream_by_name(self._module, stream_name)
         else:
             self.stream = self._get_stream_by_nsvca(
-                self._module, stream_name, stream_version, stream_context,
-                stream_arch
+                self._module, stream_name, stream_version, stream_context, stream_arch
             )
 
     @classmethod
-    def init_from_file(cls, file_path, module_name, stream_name,
-                       stream_version=None, stream_context=None,
-                       stream_arch=None):
+    def init_from_file(
+        cls,
+        file_path,
+        module_name,
+        stream_name,
+        stream_version=None,
+        stream_context=None,
+        stream_arch=None,
+    ):
         file_open = open
         if is_gzip_file(file_path):
             file_open = gzip.open
-        with file_open(file_path, 'rb') as fd:
+        with file_open(file_path, "rb") as fd:
             template = fd.read()
-        return ModuleTemplateWrapper(template, module_name, stream_name,
-                                     stream_version=stream_version,
-                                     stream_context=stream_context,
-                                     stream_arch=stream_arch)
-
-    @classmethod
-    def from_index(cls, index, module_name, stream_name,
-                   stream_version=None, stream_context=None,
-                   stream_arch=None):
         return ModuleTemplateWrapper(
-            index.dump_to_string(), module_name, stream_name,
+            template,
+            module_name,
+            stream_name,
             stream_version=stream_version,
             stream_context=stream_context,
-            stream_arch=stream_arch
+            stream_arch=stream_arch,
+        )
+
+    @classmethod
+    def from_index(
+        cls,
+        index,
+        module_name,
+        stream_name,
+        stream_version=None,
+        stream_context=None,
+        stream_arch=None,
+    ):
+        return ModuleTemplateWrapper(
+            index.dump_to_string(),
+            module_name,
+            stream_name,
+            stream_version=stream_version,
+            stream_context=stream_context,
+            stream_arch=stream_arch,
         )
 
     def add_rpm_artifact(self, rpm_pkg):
@@ -522,10 +554,13 @@ class ModuleTemplateWrapper(object):
         if isinstance(rpm_pkg, str):
             self.stream.add_rpm_artifact(rpm_pkg)
             return
-        epoch = rpm_pkg.get('epoch', 0)
-        rpm_str = '{name}-{epoch}:{version}-{release}.{arch}'.format(
-            name=rpm_pkg['name'], epoch=epoch, version=rpm_pkg['version'],
-            release=rpm_pkg['release'], arch=rpm_pkg['arch']
+        epoch = rpm_pkg.get("epoch", 0)
+        rpm_str = "{name}-{epoch}:{version}-{release}.{arch}".format(
+            name=rpm_pkg["name"],
+            epoch=epoch,
+            version=rpm_pkg["version"],
+            release=rpm_pkg["release"],
+            arch=rpm_pkg["arch"],
         )
         self.stream.add_rpm_artifact(rpm_str)
 
@@ -567,8 +602,7 @@ class ModuleTemplateWrapper(object):
         """
         component = self.stream.get_rpm_component(srpm_name)
         if not component:
-            raise DataNotFoundError('component {0} is not found'.
-                                    format(srpm_name))
+            raise DataNotFoundError("component {0} is not found".format(srpm_name))
         component.set_ref(ref)
 
     def render(self):
@@ -608,9 +642,9 @@ class ModuleTemplateWrapper(object):
         platform : dict
             Build platform definition.
         """
-        our_tracker = platform['modularity']['platform']['tracker']
+        our_tracker = platform["modularity"]["platform"]["tracker"]
         upstream_tracker = self.stream.get_tracker()
-        if upstream_tracker and 'redhat' in upstream_tracker:
+        if upstream_tracker and "redhat" in upstream_tracker:
             self.stream.set_tracker(our_tracker)
 
     def iter_mock_definitions(self):
@@ -625,15 +659,15 @@ class ModuleTemplateWrapper(object):
         buildopts = self.stream.get_buildopts()
         if buildopts is None:
             return
-        macros_template = buildopts.get_rpm_macros() or ''
+        macros_template = buildopts.get_rpm_macros() or ""
         for macros in macros_template.splitlines():
             macros = macros.strip()
-            if not macros or macros.startswith('#'):
+            if not macros or macros.startswith("#"):
                 continue
             name, *value = macros.split()
             # erasing %...
             name = name[1:]
-            value = ' '.join(value)
+            value = " ".join(value)
             yield name, value
 
     def iter_dependencies(self):
@@ -654,7 +688,7 @@ class ModuleTemplateWrapper(object):
         artifacts = []
         for art_str in self.stream.get_rpm_artifacts():
             artifact = RpmArtifact.from_str(art_str)
-            if only_src and not artifact.arch == 'src':
+            if only_src and not artifact.arch == "src":
                 continue
             if raw:
                 artifact = art_str
@@ -683,18 +717,18 @@ class ModuleTemplateWrapper(object):
     def _get_stream_by_name(module, stream_name):
         streams = module.get_streams_by_stream_name(stream_name)
         if not streams:
-            raise DataNotFoundError('stream {0} is not found'.
-                                    format(stream_name))
+            raise DataNotFoundError("stream {0} is not found".format(stream_name))
         return streams[0]
 
     @staticmethod
-    def _get_stream_by_nsvca(module, stream_name, stream_version,
-                             stream_context, stream_arch):
-        stream = module.get_stream_by_NSVCA(stream_name, stream_version,
-                                            stream_context, stream_arch)
+    def _get_stream_by_nsvca(
+        module, stream_name, stream_version, stream_context, stream_arch
+    ):
+        stream = module.get_stream_by_NSVCA(
+            stream_name, stream_version, stream_context, stream_arch
+        )
         if not stream:
-            raise DataNotFoundError('stream {0} is not found'.
-                                    format(stream_name))
+            raise DataNotFoundError("stream {0} is not found".format(stream_name))
         return stream
 
     @property

@@ -3,7 +3,7 @@ import typing
 from pydantic import BaseModel
 
 
-__all__ = ['Task']
+__all__ = ["Task"]
 
 
 class TaskRepo(BaseModel):
@@ -43,10 +43,10 @@ class Task(BaseModel):
     repositories: typing.List[TaskRepo]
 
     def is_srpm_build_required(self):
-        return not self.ref.url.endswith('src.rpm')
+        return not self.ref.url.endswith("src.rpm")
 
     def is_alma_source(self):
-        return self.ref.url.startswith('https://git.almalinux.org/')
+        return self.ref.url.startswith("https://git.almalinux.org/")
 
 
 class Artifact(BaseModel):

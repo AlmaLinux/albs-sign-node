@@ -8,7 +8,7 @@ Cloud Linux Build System logging functions.
 
 import logging
 
-__all__ = ['log_put', 'configure_logger']
+__all__ = ["log_put", "configure_logger"]
 
 
 def configure_logger(verbose, name=None, filelog=None):
@@ -34,7 +34,7 @@ def configure_logger(verbose, name=None, filelog=None):
     handler = logging.StreamHandler()
     handler.setLevel(level)
     log_format = "%(asctime)s %(levelname)-8s [%(threadName)s]: %(message)s"
-    formatter = logging.Formatter(log_format, '%y.%m.%d %H:%M:%S')
+    formatter = logging.Formatter(log_format, "%y.%m.%d %H:%M:%S")
     handler.setFormatter(formatter)
     logger = logging.getLogger(name)
     logger.addHandler(handler)
@@ -63,11 +63,11 @@ def create_log_dict(log, status):
         Dict with status and message
 
     """
-    if status not in ['info', 'debug', 'error']:
-        status = 'error'
-    return {'status': status, 'log': log}
+    if status not in ["info", "debug", "error"]:
+        status = "error"
+    return {"status": status, "log": log}
 
 
-def log_put(logs_queue, message, log_type='info'):
-    log_type = log_type if log_type in ['info', 'debug', 'error'] else 'info'
+def log_put(logs_queue, message, log_type="info"):
+    log_type = log_type if log_type in ["info", "debug", "error"] else "info"
     logs_queue.put(create_log_dict(message, log_type), True)

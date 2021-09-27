@@ -22,14 +22,15 @@ from contextlib import closing
 from lzma import LZMADecompressor
 
 import gi
-gi.require_version('Modulemd', '2.0')
+
+gi.require_version("Modulemd", "2.0")
 from gi.repository import Modulemd
 import createrepo_c as cr
 
 from castor.errors import DataNotFoundError
 from castor.utils.file_utils import download_file, hash_file
 
-__all__ = ['LOCAL_REPO', 'REMOTE_REPO']
+__all__ = ["LOCAL_REPO", "REMOTE_REPO"]
 
 LOCAL_REPO = 0
 REMOTE_REPO = 1
@@ -50,18 +51,26 @@ def _with_repodata_files(fn):
     function
         Function decorator.
     """
+
     @functools.wraps(fn)
     def wrapper(self, *args, **kwargs):
         if not self._files_cache:
             self._download_files()
         return fn(self, *args, **kwargs)
+
     return wrapper
 
 
 class RepodataParser(object):
-
-    def __init__(self, repo_url, ssl_cert=None, ssl_key=None, ssl_cainfo=None,
-                 log=None, errors='strict'):
+    def __init__(
+        self,
+        repo_url,
+        ssl_cert=None,
+        ssl_key=None,
+        ssl_cainfo=None,
+        log=None,
+        errors="strict",
+    ):
         """
         Parameters
         ----------
@@ -91,13 +100,12 @@ class RepodataParser(object):
         else:
             self.__logger = log
         self.__error_policy = errors
-        if urllib.parse.urlparse(repo_url).scheme in ('', 'file'):
+        if urllib.parse.urlparse(repo_url).scheme in ("", "file"):
             self.__repo_type = LOCAL_REPO
-            self.__repomd_url = os.path.join(repo_url, 'repodata/repomd.xml')
+            self.__repomd_url = os.path.join(repo_url, "repodata/repomd.xml")
         else:
             self.__repo_type = REMOTE_REPO
-            self.__repomd_url = urllib.parse.urljoin(repo_url,
-                                                     'repodata/repomd.xml')
+            self.__repomd_url = urllib.parse.urljoin(repo_url, "repodata/repomd.xml")
         self.__repo_dir, self.__repomd_path = self.__get_repomd_path()
 
     @property
@@ -124,22 +132,23 @@ class RepodataParser(object):
             Dictionary with extracted information.
         """
         repomd = cr.Repomd(self.__repomd_path)
-        repo_info = {'checksum_type': 'sha256',
-                     'checksum': str(hash_file(self.__repomd_path,
-                                               hashlib.sha256()))}
+        repo_info = {
+            "checksum_type": "sha256",
+            "checksum": str(hash_file(self.__repomd_path, hashlib.sha256())),
+        }
         for rec in repomd.records:
             rec_info = {
-                'checksum': rec.checksum,
-                'checksum_type': rec.checksum_type,
-                'open-checksum': rec.checksum_open,
-                'open-checksum_type': rec.checksum_open_type,
-                'timestamp': rec.timestamp,
-                'location': self.__full_location(rec.location_href),
-                'open-size': int(rec.size_open),
-                'size': int(rec.size)
+                "checksum": rec.checksum,
+                "checksum_type": rec.checksum_type,
+                "open-checksum": rec.checksum_open,
+                "open-checksum_type": rec.checksum_open_type,
+                "timestamp": rec.timestamp,
+                "location": self.__full_location(rec.location_href),
+                "open-size": int(rec.size_open),
+                "size": int(rec.size),
             }
             if rec.db_ver:
-                rec_info['database_version'] = int(rec.db_ver)
+                rec_info["database_version"] = int(rec.db_ver)
 
             repo_info[rec.type] = rec_info
         return repo_info
@@ -149,7 +158,7 @@ class RepodataParser(object):
         """Iterates over repository packages."""
 
         repomd = cr.Repomd(self.__repomd_path)
-        if {'primary_db', 'filelists_db', 'other_db'} <= set(self._files_cache):
+        if {"primary_db", "filelists_db", "other_db"} <= set(self._files_cache):
             for pkg in self.__iter_packages_sqlite(self._files_cache):
                 yield pkg
         else:
@@ -166,25 +175,33 @@ class RepodataParser(object):
                 self.__logger.warning(message)
                 return True
 
-            self.__logger.debug('processing {0} repository using xml '
-                                'repodata'.format(self.__repo_url))
+            self.__logger.debug(
+                "processing {0} repository using xml "
+                "repodata".format(self.__repo_url)
+            )
             for record in repomd.records:
 
-                if record.type == 'primary':
-                    cr.xml_parse_primary(self._files_cache[record.type],
-                                         pkgcb=pkgcb,
-                                         do_files=False,
-                                         warningcb=warningcb)
-                elif record.type == 'filelists':
-                    cr.xml_parse_filelists(self._files_cache[record.type],
-                                           pkgcb=pkgcb,
-                                           newpkgcb=newpkgcb,
-                                           warningcb=warningcb)
-                elif record.type == 'other':
-                    cr.xml_parse_other(self._files_cache[record.type],
-                                       pkgcb=pkgcb,
-                                       newpkgcb=newpkgcb,
-                                       warningcb=warningcb)
+                if record.type == "primary":
+                    cr.xml_parse_primary(
+                        self._files_cache[record.type],
+                        pkgcb=pkgcb,
+                        do_files=False,
+                        warningcb=warningcb,
+                    )
+                elif record.type == "filelists":
+                    cr.xml_parse_filelists(
+                        self._files_cache[record.type],
+                        pkgcb=pkgcb,
+                        newpkgcb=newpkgcb,
+                        warningcb=warningcb,
+                    )
+                elif record.type == "other":
+                    cr.xml_parse_other(
+                        self._files_cache[record.type],
+                        pkgcb=pkgcb,
+                        newpkgcb=newpkgcb,
+                        warningcb=warningcb,
+                    )
 
             for pkg in list(packages.values()):
                 yield self.__get_pkg_dict(pkg)
@@ -199,7 +216,7 @@ class RepodataParser(object):
         bool
             True if a repository is modular, False otherwise.
         """
-        return 'modules' in self._files_cache
+        return "modules" in self._files_cache
 
     def close(self):
         """Deletes temporary created files."""
@@ -218,42 +235,47 @@ class RepodataParser(object):
                    size_archive AS archivesize, location_href AS location,
                    checksum_type AS checksum_type FROM packages"""
 
-        self.__logger.debug('processing {0} repository using SQLite '
-                            'repodata'.format(self.__repo_url))
-        with closing(sqlite3.connect(sql_files['primary_db'])) as con:
+        self.__logger.debug(
+            "processing {0} repository using SQLite " "repodata".format(self.__repo_url)
+        )
+        with closing(sqlite3.connect(sql_files["primary_db"])) as con:
             with closing(con.cursor()) as cur:
                 for row in cur.execute(sql):
-                    pkg = {'provides': [], 'conflicts': [], 'requires': [],
-                           'obsoletes': [], 'files': [], 'changelogs': []}
+                    pkg = {
+                        "provides": [],
+                        "conflicts": [],
+                        "requires": [],
+                        "obsoletes": [],
+                        "files": [],
+                        "changelogs": [],
+                    }
                     pkg_key = None
                     for i, col_info in enumerate(cur.description):
                         key = col_info[0]
                         value = row[i]
                         if value is None:
                             continue
-                        elif key == 'pkgKey':
+                        elif key == "pkgKey":
                             pkg_key = value
-                        elif key == 'epoch':
-                            pkg['epoch'] = int(value)
+                        elif key == "epoch":
+                            pkg["epoch"] = int(value)
                         else:
                             pkg[key] = value
-                    pkg['full_location'] = self.__full_location(
-                        pkg['location'])
+                    pkg["full_location"] = self.__full_location(pkg["location"])
                     self.__read_primary_files_sqlite(pkg_key, pkg, con)
-                    self.__read_filelists_sqlite(pkg_key, pkg,
-                                                 sql_files['filelists_db'])
-                    self.__read_other_sqlite(pkg_key, pkg,
-                                             sql_files['other_db'])
+                    self.__read_filelists_sqlite(
+                        pkg_key, pkg, sql_files["filelists_db"]
+                    )
+                    self.__read_other_sqlite(pkg_key, pkg, sql_files["other_db"])
                     self.__read_pcro_sqlite(pkg_key, pkg, con)
                     yield pkg
 
     @staticmethod
     def __read_primary_files_sqlite(pkg_key, pkg, con):
-        sql = 'SELECT name, type FROM files WHERE pkgKey = ?'
+        sql = "SELECT name, type FROM files WHERE pkgKey = ?"
         with closing(con.cursor()) as cur:
             for name, type_ in cur.execute(sql, (pkg_key,)):
-                pkg['files'].append({'name': name, 'type': type_,
-                                     'primary': True})
+                pkg["files"].append({"name": name, "type": type_, "primary": True})
 
     @staticmethod
     def __read_sqlite_db(file_path, pkg_key, pkg, callback):
@@ -282,16 +304,19 @@ class RepodataParser(object):
         """
         con = sqlite3.connect(file_path)
         with closing(con.cursor()) as cur:
-            cur.execute('SELECT pkgId FROM packages WHERE pkgKey = ?',
-                        (pkg_key,))
+            cur.execute("SELECT pkgId FROM packages WHERE pkgKey = ?", (pkg_key,))
             row = cur.fetchone()
             if not row:
                 raise DataNotFoundError(
-                    f'pkgKey {pkg_key} is not found in the filelists database')
-            if row[0] != pkg['checksum']:
-                raise ValueError('pkgKey {0} filelists record\'s checksum '
-                                 '{1!r} is different from expected {2!r}'.
-                                 format(pkg_key, row[0], pkg['checksum']))
+                    f"pkgKey {pkg_key} is not found in the filelists database"
+                )
+            if row[0] != pkg["checksum"]:
+                raise ValueError(
+                    "pkgKey {0} filelists record's checksum "
+                    "{1!r} is different from expected {2!r}".format(
+                        pkg_key, row[0], pkg["checksum"]
+                    )
+                )
         with closing(con.cursor()) as cur:
             callback(cur, pkg)
         con.close()
@@ -316,26 +341,28 @@ class RepodataParser(object):
         """
 
         def process_filelists(cursor, pkg_):
-            file_types = {'d': 'dir', 'f': 'file', 'g': 'ghost'}
-            pkg_files = [f['name'] for f in pkg_['files']]
+            file_types = {"d": "dir", "f": "file", "g": "ghost"}
+            pkg_files = [f["name"] for f in pkg_["files"]]
             cursor.execute(
-                'SELECT dirname, filenames, filetypes FROM filelist '
-                'WHERE pkgKey = ?', (pkg_key,))
+                "SELECT dirname, filenames, filetypes FROM filelist "
+                "WHERE pkgKey = ?",
+                (pkg_key,),
+            )
             for row in cursor:
                 dir_name = row[0]
-                for file_name, file_type in zip(row[1].split('/'), row[2]):
+                for file_name, file_type in zip(row[1].split("/"), row[2]):
                     file_ = os.path.join(dir_name, file_name)
                     if file_ not in pkg_files:
-                        file_rec = {'name': file_}
+                        file_rec = {"name": file_}
                         if file_type in file_types:
-                            file_rec['type'] = file_types[file_type]
+                            file_rec["type"] = file_types[file_type]
                         else:
-                            raise ValueError('unknown file type {0!r}'.
-                                             format(file_type))
-                        pkg_['files'].append(file_rec)
+                            raise ValueError(
+                                "unknown file type {0!r}".format(file_type)
+                            )
+                        pkg_["files"].append(file_rec)
 
-        RepodataParser.__read_sqlite_db(file_path, pkg_key, pkg,
-                                        process_filelists)
+        RepodataParser.__read_sqlite_db(file_path, pkg_key, pkg, process_filelists)
 
     @staticmethod
     def __read_other_sqlite(pkg_key, pkg, file_path):
@@ -351,15 +378,18 @@ class RepodataParser(object):
         """
 
         def process_data(cursor, pkg_):
-            cursor.execute('SELECT author, date, changelog FROM changelog '
-                           'WHERE pkgKey = ? ORDER BY date DESC', (pkg_key,))
+            cursor.execute(
+                "SELECT author, date, changelog FROM changelog "
+                "WHERE pkgKey = ? ORDER BY date DESC",
+                (pkg_key,),
+            )
             for row in cursor:
-                changelog = {'text': row[2]}
+                changelog = {"text": row[2]}
                 if row[0]:
-                    changelog['author'] = row[0]
+                    changelog["author"] = row[0]
                 if row[1]:
-                    changelog['date'] = row[1]
-                pkg_['changelogs'].append(changelog)
+                    changelog["date"] = row[1]
+                pkg_["changelogs"].append(changelog)
 
         RepodataParser.__read_sqlite_db(file_path, pkg_key, pkg, process_data)
 
@@ -376,25 +406,24 @@ class RepodataParser(object):
         pkg : dict
             RPM package to read PCRO information into.
         """
-        columns = ['name', 'flags', 'epoch', 'version', 'release']
-        for field in ('provides', 'conflicts', 'requires', 'obsoletes'):
-            sql = 'SELECT {0} FROM {1} WHERE pkgKey = ?'.\
-                format(', '.join(
-                    columns + ['pre'] if field == 'requires' else columns),
-                    field)
+        columns = ["name", "flags", "epoch", "version", "release"]
+        for field in ("provides", "conflicts", "requires", "obsoletes"):
+            sql = "SELECT {0} FROM {1} WHERE pkgKey = ?".format(
+                ", ".join(columns + ["pre"] if field == "requires" else columns), field
+            )
             with closing(con.cursor()) as cur:
                 for row in cur.execute(sql, (pkg_key,)):
-                    feature = {'name': row[0]}
+                    feature = {"name": row[0]}
                     if row[1]:
-                        feature['flag'] = row[1]
+                        feature["flag"] = row[1]
                         if row[2] is not None:
-                            feature['epoch'] = int(row[2])
+                            feature["epoch"] = int(row[2])
                         if row[3] is not None:
-                            feature['version'] = row[3]
+                            feature["version"] = row[3]
                         if row[4] is not None:
-                            feature['release'] = row[4]
-                    if field == 'requires' and row[5] in ('TRUE', 1, True):
-                        feature['pre'] = True
+                            feature["release"] = row[4]
+                    if field == "requires" and row[5] in ("TRUE", 1, True):
+                        feature["pre"] = True
                     pkg[field].append(feature)
 
     def __full_location(self, location):
@@ -406,15 +435,15 @@ class RepodataParser(object):
     def __get_field_info(fields):
         list_info = []
         for field in fields:
-            info = {'name': field[0],
-                    'flag': field[1],
-                    'epoch': field[2],
-                    'version': field[3],
-                    'release': field[4],
-                    'pre': field[5]}
-            info = dict((k, v)
-                        for k, v in iter(list(info.items()))
-                        if v)
+            info = {
+                "name": field[0],
+                "flag": field[1],
+                "epoch": field[2],
+                "version": field[3],
+                "release": field[4],
+                "pre": field[5],
+            }
+            info = dict((k, v) for k, v in iter(list(info.items())) if v)
             list_info.append(info)
         return list_info
 
@@ -422,63 +451,65 @@ class RepodataParser(object):
     def __get_files(pkg, pkg_primary=None):
         file_list = []
         for f in pkg.files:
-            file_info = {'type': 'dir' if f[0] == 'dir' else 'file',
-                         'name': os.path.join(f[1], f[2])}
+            file_info = {
+                "type": "dir" if f[0] == "dir" else "file",
+                "name": os.path.join(f[1], f[2]),
+            }
             if pkg_primary:
-                file_info['primary'] = True
+                file_info["primary"] = True
             file_list.append(file_info)
         return file_list
 
     def __get_pkg_dict(self, pkg):
         """Convert the package to the required dict"""
         pkg_info = {
-            'filetime': pkg.time_file,
-            'archivesize': int(pkg.size_archive),
-            'buildhost': pkg.rpm_buildhost,
-            'installedsize': int(pkg.size_installed),
-            'hdrend': pkg.rpm_header_end,
-            'group': pkg.rpm_group,
-            'epoch': int(pkg.epoch),
-            'version': pkg.version,
-            'obsoletes': self.__get_field_info(pkg.obsoletes),
-            'provides': self.__get_field_info(pkg.provides),
-            'full_location': self.__full_location(pkg.location_href),
-            'location': pkg.location_href,
-            'files': self.__get_files(pkg),
-            'vendor': pkg.rpm_vendor or '',
-            'description': pkg.description,
-            'hdrstart': pkg.rpm_header_start,
-            'buildtime': pkg.time_build,
-            'conflicts': self.__get_field_info(pkg.conflicts),
-            'arch': pkg.arch,
-            'name': pkg.name,
-            'license': pkg.rpm_license,
-            'url': pkg.url,
-            'checksum': pkg.pkgId,
-            'summary': pkg.summary,
-            'packagesize': int(pkg.size_package),
-            'changelogs': [{'author': log[0],
-                            'date': int(log[1]),
-                            'text': log[2]} for log in pkg.changelogs],
-            'release': pkg.release,
-            'checksum_type': pkg.checksum_type,
-            'requires': self.__get_field_info(pkg.requires),
-            'sourcerpm': pkg.rpm_sourcerpm,
-            'packager': pkg.rpm_packager
+            "filetime": pkg.time_file,
+            "archivesize": int(pkg.size_archive),
+            "buildhost": pkg.rpm_buildhost,
+            "installedsize": int(pkg.size_installed),
+            "hdrend": pkg.rpm_header_end,
+            "group": pkg.rpm_group,
+            "epoch": int(pkg.epoch),
+            "version": pkg.version,
+            "obsoletes": self.__get_field_info(pkg.obsoletes),
+            "provides": self.__get_field_info(pkg.provides),
+            "full_location": self.__full_location(pkg.location_href),
+            "location": pkg.location_href,
+            "files": self.__get_files(pkg),
+            "vendor": pkg.rpm_vendor or "",
+            "description": pkg.description,
+            "hdrstart": pkg.rpm_header_start,
+            "buildtime": pkg.time_build,
+            "conflicts": self.__get_field_info(pkg.conflicts),
+            "arch": pkg.arch,
+            "name": pkg.name,
+            "license": pkg.rpm_license,
+            "url": pkg.url,
+            "checksum": pkg.pkgId,
+            "summary": pkg.summary,
+            "packagesize": int(pkg.size_package),
+            "changelogs": [
+                {"author": log[0], "date": int(log[1]), "text": log[2]}
+                for log in pkg.changelogs
+            ],
+            "release": pkg.release,
+            "checksum_type": pkg.checksum_type,
+            "requires": self.__get_field_info(pkg.requires),
+            "sourcerpm": pkg.rpm_sourcerpm,
+            "packager": pkg.rpm_packager,
         }
-        return dict((k, v)
-                    for k, v in pkg_info.items()
-                    if v is not None)
+        return dict((k, v) for k, v in pkg_info.items() if v is not None)
 
     def __get_repomd_path(self):
-        tmpdir = tempfile.mkdtemp(prefix='parse_repomd_')
+        tmpdir = tempfile.mkdtemp(prefix="parse_repomd_")
         try:
             repomd_path = download_file(
-                self.__full_location('repodata/repomd.xml'),
+                self.__full_location("repodata/repomd.xml"),
                 tmpdir,
                 ssl_cert=self.__ssl_cert,
                 ssl_key=self.__ssl_key,
-                ca_info=self.__ssl_cainfo)
+                ca_info=self.__ssl_cainfo,
+            )
             return tmpdir, repomd_path
         except Exception:
             shutil.rmtree(tmpdir)
@@ -498,18 +529,18 @@ class RepodataParser(object):
            Path to extracted file
         """
         archive_content = None
-        extracted_file = re.sub(r'\.gz|\.bz2|\.xz', '', archive_path)
-        if re.search(r'\.gz$', archive_path, re.IGNORECASE):
-            with gzip.open(archive_path, 'rb') as f:
+        extracted_file = re.sub(r"\.gz|\.bz2|\.xz", "", archive_path)
+        if re.search(r"\.gz$", archive_path, re.IGNORECASE):
+            with gzip.open(archive_path, "rb") as f:
                 archive_content = f.read()
-        if re.search(r'\.bz2$', archive_path, re.IGNORECASE):
-            with open(archive_path, 'rb') as f:
+        if re.search(r"\.bz2$", archive_path, re.IGNORECASE):
+            with open(archive_path, "rb") as f:
                 archive_content = BZ2Decompressor().decompress(f.read())
-        if re.search(r'\.xz$', archive_path, re.IGNORECASE):
-            with open(archive_path, 'rb') as f:
+        if re.search(r"\.xz$", archive_path, re.IGNORECASE):
+            with open(archive_path, "rb") as f:
                 archive_content = LZMADecompressor().decompress(f.read())
         if extracted_file is not None:
-            with open(extracted_file, 'wb') as f:
+            with open(extracted_file, "wb") as f:
                 f.write(archive_content)
             os.remove(archive_path)
         return extracted_file
@@ -527,11 +558,11 @@ class RepodataParser(object):
         if not self.is_modular():
             return
         supported_version = Modulemd.ModuleStreamVersionEnum.TWO
-        modules_path = self._files_cache['modules']
+        modules_path = self._files_cache["modules"]
         modules_idx = Modulemd.ModuleIndex.new()
         ret, failures = modules_idx.update_from_file(modules_path, True)
         if not ret:
-            raise Exception('can not update module index')
+            raise Exception("can not update module index")
         for module_name in modules_idx.get_module_names():
             module = modules_idx.get_module(module_name)
             for stream in module.get_all_streams():
@@ -541,8 +572,7 @@ class RepodataParser(object):
                 stream_mdversion = stream.get_mdversion()
                 if stream_mdversion != supported_version:
                     raise NotImplementedError(
-                        f'{stream_mdversion} metadata version is not '
-                        f'supported yet'
+                        f"{stream_mdversion} metadata version is not " f"supported yet"
                     )
                 yield module, stream
 
@@ -557,12 +587,13 @@ class RepodataParser(object):
                     self.__repo_dir,
                     ssl_cert=self.__ssl_cert,
                     ssl_key=self.__ssl_key,
-                    ca_info=self.__ssl_cainfo
+                    ca_info=self.__ssl_cainfo,
                 )
                 # unpack sqlite databases and modules.yaml so that we can work
                 # with them
-                if re.search(r'(\.sqlite|modules.*?)\.(gz|bz2|xz)$', file_path,
-                             re.IGNORECASE):
+                if re.search(
+                    r"(\.sqlite|modules.*?)\.(gz|bz2|xz)$", file_path, re.IGNORECASE
+                ):
                     file_path = self.__extract_archive(file_path)
                 local_file_url[rec.type] = file_path
             self._files_cache = local_file_url

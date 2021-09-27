@@ -4,7 +4,7 @@
 
 """Build System mathematical functions."""
 
-__all__ = ['trim_mean']
+__all__ = ["trim_mean"]
 
 
 def trim_mean(numbers, percent):
@@ -24,8 +24,8 @@ def trim_mean(numbers, percent):
         Truncated mean for the specified list of numbers.
     """
     if percent > 40:
-        raise ValueError('maximum percentage value 40 exceeded')
+        raise ValueError("maximum percentage value 40 exceeded")
     l = len(numbers)  # noqa
     k = int(round(l * (float(percent) / 100)))
-    trimmed_numbers = numbers[k:l - k]
+    trimmed_numbers = numbers[k : l - k]
     return sum(trimmed_numbers) / float(len(trimmed_numbers))

@@ -10,7 +10,7 @@ import yaml
 
 from ..errors import DataSchemaError
 
-__all__ = ['verify_schema', 'BuildSysValidator']
+__all__ = ["verify_schema", "BuildSysValidator"]
 
 
 class BuildSysValidator(cerberus.Validator):
@@ -62,7 +62,7 @@ class BuildSysValidator(cerberus.Validator):
         v = value if isinstance(value, bool) else yaml.load(value)
         if isinstance(v, bool):
             return v
-        raise ValueError('invalid value for the boolean type')
+        raise ValueError("invalid value for the boolean type")
 
 
 def verify_schema(schema, data):

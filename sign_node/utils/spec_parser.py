@@ -9,12 +9,12 @@ import re
 
 from castor.utils.rpm_utils import string_to_version
 
-__all__ = ['RPMChangelogRecord']
+__all__ = ["RPMChangelogRecord"]
 
 
-class RPMChangelogRecord(namedtuple('RPMChangelogRecord',
-                                    ['date', 'packager', 'text'])):
-
+class RPMChangelogRecord(
+    namedtuple("RPMChangelogRecord", ["date", "packager", "text"])
+):
     @staticmethod
     def generate(date, user_name, user_email, evr, text):
         """
@@ -38,7 +38,7 @@ class RPMChangelogRecord(namedtuple('RPMChangelogRecord',
         RPMChangelogRecord
             Initialized changelog record.
         """
-        packager = '{0} <{1}> - {2}'.format(user_name, user_email, evr)
+        packager = "{0} <{1}> - {2}".format(user_name, user_email, evr)
         text = [text] if isinstance(text, str) else text
         formatted_text = RPMChangelogRecord.format_changelog_text(text)
         return RPMChangelogRecord(date, packager, formatted_text)
@@ -60,8 +60,8 @@ class RPMChangelogRecord(namedtuple('RPMChangelogRecord',
         """
         formatted = []
         for line in text:
-            if not line.startswith('-'):
-                line = '- {0}'.format(line)
+            if not line.startswith("-"):
+                line = "- {0}".format(line)
             formatted.append(line)
         return formatted
 
@@ -77,7 +77,7 @@ class RPMChangelogRecord(namedtuple('RPMChangelogRecord',
             Package EVR substring or None if there was no version
             information found.
         """
-        re_rslt = re.search(r'[\s-]+(\d+[-\w:.]*)$', self.packager)
+        re_rslt = re.search(r"[\s-]+(\d+[-\w:.]*)$", self.packager)
         return re_rslt.group(1) if re_rslt else None
 
     @property
@@ -118,11 +118,9 @@ class RPMChangelogRecord(namedtuple('RPMChangelogRecord',
         return string_to_version(self.evr)[2]
 
     def __str__(self):
-        header = '* {0} {1}'.format(self.date.strftime('%a %b %d %Y'),
-                                    self.packager)
-        return '{0}\n{1}'.format(header, '\n'.join(self.text))
+        header = "* {0} {1}".format(self.date.strftime("%a %b %d %Y"), self.packager)
+        return "{0}\n{1}".format(header, "\n".join(self.text))
 
     def __unicode__(self):
-        header = '* {0} {1}'.format(self.date.strftime('%a %b %d %Y'),
-                                    self.packager)
-        return '{0}\n{1}'.format(header, '\n'.join(self.text))
+        header = "* {0} {1}".format(self.date.strftime("%a %b %d %Y"), self.packager)
+        return "{0}\n{1}".format(header, "\n".join(self.text))

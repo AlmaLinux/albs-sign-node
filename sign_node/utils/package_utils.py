@@ -5,7 +5,7 @@
 import re
 
 
-__all__ = ['is_debug_package']
+__all__ = ["is_debug_package"]
 
 
 def is_debug_package(file_name, package_type):
@@ -24,8 +24,8 @@ def is_debug_package(file_name, package_type):
     bool
         True if package contains debug info, False otherwise.
     """
-    if package_type in ('dsc', 'srpm'):
+    if package_type in ("dsc", "srpm"):
         return False
-    elif package_type == 'deb':
-        return '-dbg' in file_name
-    return bool(re.search(r'-debug(info|source)', file_name))
+    elif package_type == "deb":
+        return "-dbg" in file_name
+    return bool(re.search(r"-debug(info|source)", file_name))

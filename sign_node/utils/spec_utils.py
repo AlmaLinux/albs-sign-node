@@ -18,10 +18,17 @@ from build_node.build_node_errors import BuildError
 from ..errors import DataNotFoundError
 
 
-__all__ = ['add_gerrit_ref_to_spec', 'bump_release', 'bump_release_spec_file',
-           'bump_version_datestamp_spec_file', 'add_changelog_spec_file',
-           'find_spec_file', 'get_raw_spec_data', 'wipe_rpm_macro',
-           'parse_evr']
+__all__ = [
+    "add_gerrit_ref_to_spec",
+    "bump_release",
+    "bump_release_spec_file",
+    "bump_version_datestamp_spec_file",
+    "add_changelog_spec_file",
+    "find_spec_file",
+    "get_raw_spec_data",
+    "wipe_rpm_macro",
+    "parse_evr",
+]
 
 
 def find_spec_file(package_name, sources_dir, spec_file=None):
@@ -55,7 +62,7 @@ def find_spec_file(package_name, sources_dir, spec_file=None):
     spec = None
     specs = [s for s in os.listdir(sources_dir) if s.endswith(".spec")]
     for f in specs:
-        if '{}.spec'.format(package_name) in f:
+        if "{}.spec".format(package_name) in f:
             return os.path.join(sources_dir, f)
     for f in specs:
         spec = os.path.join(sources_dir, f)
@@ -85,20 +92,21 @@ def bump_release(release, reset_to=None):
     ValueError
         If the release can not be bumped.
     """
-    segments = re.split(r'(%{\??\w{3,}}|%\??\w{3,}|el\d+_?\w*|\.|[a-z]+)',
-                        release, flags=re.IGNORECASE)
+    segments = re.split(
+        r"(%{\??\w{3,}}|%\??\w{3,}|el\d+_?\w*|\.|[a-z]+)", release, flags=re.IGNORECASE
+    )
     segment_pos = None
     for i, segment in enumerate(segments):
-        if re.search(r'^\d+$', segment):
+        if re.search(r"^\d+$", segment):
             segment_pos = i
     if segment_pos is None:
-        raise ValueError('invalid release value {0}'.format(release))
+        raise ValueError("invalid release value {0}".format(release))
     if reset_to:
         release_number = reset_to
     else:
         release_number = str(int(segments[segment_pos]) + 1)
     segments[segment_pos] = release_number
-    return str(''.join(segments))
+    return str("".join(segments))
 
 
 def bump_release_spec_file(spec_file):
@@ -110,14 +118,14 @@ def bump_release_spec_file(spec_file):
     spec_file : str or unicode
         Path to spec file
     """
-    with open(spec_file, 'r') as fd:
+    with open(spec_file, "r") as fd:
         spec = StringIO(fd.read())
-    with open(spec_file, 'w') as fd:
+    with open(spec_file, "w") as fd:
         for line in spec:
-            re_rslt = re.search(r'^Release:(\s+)(\S+)(?:\n|$)', line)
+            re_rslt = re.search(r"^Release:(\s+)(\S+)(?:\n|$)", line)
             if re_rslt:
                 release = bump_release(re_rslt.group(2))
-                fd.write('Release:{0}{1}\n'.format(re_rslt.group(1), release))
+                fd.write("Release:{0}{1}\n".format(re_rslt.group(1), release))
             else:
                 fd.write(line)
 
@@ -137,27 +145,29 @@ def bump_version_datestamp_spec_file(spec_file):
     castor.errors.DataNotFoundError
         If there is no Version or Release in the spec file.
     """
-    fields = ['Version', 'Release']
+    fields = ["Version", "Release"]
     spec_data = get_raw_spec_data(spec_file, fields)
     for field in fields:
         if not spec_data.get(field):
-            raise DataNotFoundError('there is no {0} field in the {1} spec '
-                                    'file'.format(field, spec_file))
-    today_version = datetime.date.today().strftime('%Y%m%d')
-    if spec_data['Version'] == today_version:
-        spec_data['Release'] = bump_release(spec_data['Release'])
+            raise DataNotFoundError(
+                "there is no {0} field in the {1} spec " "file".format(field, spec_file)
+            )
+    today_version = datetime.date.today().strftime("%Y%m%d")
+    if spec_data["Version"] == today_version:
+        spec_data["Release"] = bump_release(spec_data["Release"])
     else:
-        spec_data['Version'] = today_version
-        spec_data['Release'] = bump_release(spec_data['Release'], reset_to='1')
-    with open(spec_file, 'r') as fd:
+        spec_data["Version"] = today_version
+        spec_data["Release"] = bump_release(spec_data["Release"], reset_to="1")
+    with open(spec_file, "r") as fd:
         spec = StringIO(fd.read())
-    with open(spec_file, 'w') as fd:
+    with open(spec_file, "w") as fd:
         for line in spec:
-            re_rslt = re.search(r'^(Version|Release):(\s+)(\S+)(?:\n|$)', line)
+            re_rslt = re.search(r"^(Version|Release):(\s+)(\S+)(?:\n|$)", line)
             if re_rslt:
                 field = re_rslt.group(1)
-                fd.write('{0}:{1}{2}\n'.format(field, re_rslt.group(2),
-                                               spec_data[field]))
+                fd.write(
+                    "{0}:{1}{2}\n".format(field, re_rslt.group(2), spec_data[field])
+                )
             else:
                 fd.write(line)
     return spec_data
@@ -174,16 +184,16 @@ def add_changelog_spec_file(spec_file, changelog):
     changelog : str
         Changelog record text.
     """
-    with open(spec_file, 'r') as fd:
+    with open(spec_file, "r") as fd:
         spec = StringIO(fd.read())
-    with open(spec_file, 'w') as fd:
+    with open(spec_file, "w") as fd:
         for line in spec:
-            if re.search(r'%changelog', line):
+            if re.search(r"%changelog", line):
                 fd.write(line)
                 fd.write(changelog)
-                if not re.search(r'\n$', changelog):
-                    fd.write('\n')
-                fd.write('\n')
+                if not re.search(r"\n$", changelog):
+                    fd.write("\n")
+                fd.write("\n")
             else:
                 fd.write(line)
 
@@ -202,35 +212,36 @@ def add_gerrit_ref_to_spec(spec_file, ref=None):
     -------
 
     """
-    new_release_str = 'Release: {release}.{timestamp}'
+    new_release_str = "Release: {release}.{timestamp}"
     if ref:
         try:
             _, _, _, change, patch_set = ref.split("/")
-            new_release_str = '{0}.{1}.{2}'.format(new_release_str, change,
-                                                   patch_set)
+            new_release_str = "{0}.{1}.{2}".format(new_release_str, change, patch_set)
         except Exception as e:
-            raise BuildError('cannot parse gerrit reference {0!r}: {1}. '
-                             'Traceback:\n{2}'.format(ref, str(e),
-                                                      traceback.format_exc()))
+            raise BuildError(
+                "cannot parse gerrit reference {0!r}: {1}. "
+                "Traceback:\n{2}".format(ref, str(e), traceback.format_exc())
+            )
     try:
-        with open(spec_file, 'r+') as fd:
+        with open(spec_file, "r+") as fd:
             lines = []
             for line in fd:
-                re_rslt = re.search(r'^Release:\s*([^\s#]+)', line,
-                                    re.IGNORECASE)
+                re_rslt = re.search(r"^Release:\s*([^\s#]+)", line, re.IGNORECASE)
                 if re_rslt:
                     new_release_str = new_release_str.format(
-                        release=re_rslt.group(1), timestamp=int(time.time()))
-                    lines.append('{0}\n'.format(new_release_str))
+                        release=re_rslt.group(1), timestamp=int(time.time())
+                    )
+                    lines.append("{0}\n".format(new_release_str))
                 else:
                     lines.append(line)
             fd.seek(0)
             fd.writelines(lines)
             fd.truncate()
     except Exception as e:
-        raise BuildError('cannot add timestamp to spec file: {0}. '
-                         'Traceback:\n{1}'.format(str(e),
-                                                  traceback.format_exc()))
+        raise BuildError(
+            "cannot add timestamp to spec file: {0}. "
+            "Traceback:\n{1}".format(str(e), traceback.format_exc())
+        )
 
 
 def get_raw_spec_data(spec_file, fields):
@@ -256,8 +267,8 @@ def get_raw_spec_data(spec_file, fields):
     {'Version': '1.2', 'Release': '1%{?dist}'}
     """
     data = {}
-    regex = re.compile(r'^({0}):(?:\s+)(\S+)(?:\n|$)'.format('|'.join(fields)))
-    with open(spec_file, 'r') as fd:
+    regex = re.compile(r"^({0}):(?:\s+)(\S+)(?:\n|$)".format("|".join(fields)))
+    with open(spec_file, "r") as fd:
         for line in fd:
             re_rslt = regex.search(line)
             if re_rslt:
@@ -289,8 +300,9 @@ def wipe_rpm_macro(string):
     >>> wipe_rpm_macro('12.%{?dist}')
     '12'
     """
-    return re.sub(r'\.+$', '',
-                  re.sub(r'(%{[?|!]*\w{3,}[^}]*}|%[?|!]*\w{3,})', '', string))
+    return re.sub(
+        r"\.+$", "", re.sub(r"(%{[?|!]*\w{3,}[^}]*}|%[?|!]*\w{3,})", "", string)
+    )
 
 
 def parse_evr(evr):
@@ -314,7 +326,7 @@ def parse_evr(evr):
     ValueError
         If the `evr` format is not valid.
     """
-    re_rslt = re.search(r'(?:(\d+):|)([\w.]+?)-(\S*)$', evr)
+    re_rslt = re.search(r"(?:(\d+):|)([\w.]+?)-(\S*)$", evr)
     if not re_rslt:
-        raise ValueError('invalid evr string format')
+        raise ValueError("invalid evr string format")
     return re_rslt.groups()

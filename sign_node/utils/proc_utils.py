@@ -18,8 +18,9 @@ def get_current_thread_ident():
     str
         Byte string identifier.
     """
-    return struct.pack(b'i20p', os.getpid(),
-                       threading.current_thread().name.encode('utf-8'))
+    return struct.pack(
+        b"i20p", os.getpid(), threading.current_thread().name.encode("utf-8")
+    )
 
 
 def is_pid_exists(pid):
@@ -42,7 +43,7 @@ def is_pid_exists(pid):
         If the specified pid is invalid.
     """
     if pid < 1:
-        raise ValueError('invalid pid {0}'.format(pid))
+        raise ValueError("invalid pid {0}".format(pid))
     try:
         os.kill(pid, 0)
     except OSError as e:

@@ -19,7 +19,7 @@ def clean_dir_except_git(dir_path):
         Full path to directory to clean.
     """
     for name in os.listdir(dir_path):
-        if name == '.git':
+        if name == ".git":
             continue
         path = os.path.join(dir_path, name)
         if os.path.islink(path):

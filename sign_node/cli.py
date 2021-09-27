@@ -11,7 +11,7 @@ import logging
 
 from .utils.file_utils import safe_mkdir, clean_dir
 
-__all__ = ['init_args_parser', 'init_working_dir']
+__all__ = ["init_args_parser", "init_working_dir"]
 
 
 def init_working_dir(working_dir):
@@ -28,11 +28,10 @@ def init_working_dir(working_dir):
     #       used by the sign node and we have something very similar in the
     #       build node's code.
     if not safe_mkdir(working_dir):
-        logging.debug('cleaning up the {0} working directory'.
-                      format(working_dir))
+        logging.debug("cleaning up the {0} working directory".format(working_dir))
         clean_dir(working_dir)
     else:
-        logging.debug('working directory {0} was created'.format(working_dir))
+        logging.debug("working directory {0} was created".format(working_dir))
 
 
 def init_args_parser():
@@ -44,10 +43,10 @@ def init_args_parser():
     argparse.ArgumentParser
     """
     parser = argparse.ArgumentParser(
-        prog='sign_node',
-        description='CloudLinux Build System builds sign node'
+        prog="sign_node", description="CloudLinux Build System builds sign node"
     )
-    parser.add_argument('-c', '--config', help='configuration file path')
-    parser.add_argument('-v', '--verbose', action='store_true',
-                        help='enable additional debug output')
+    parser.add_argument("-c", "--config", help="configuration file path")
+    parser.add_argument(
+        "-v", "--verbose", action="store_true", help="enable additional debug output"
+    )
     return parser

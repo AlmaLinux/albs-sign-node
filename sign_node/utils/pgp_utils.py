@@ -14,8 +14,13 @@ import plumbum
 from ..errors import ConfigurationError
 
 
-__all__ = ['init_gpg', 'scan_pgp_info_from_file', 'verify_pgp_key_password',
-           'restart_gpg_agent', 'PGPPasswordDB']
+__all__ = [
+    "init_gpg",
+    "scan_pgp_info_from_file",
+    "verify_pgp_key_password",
+    "restart_gpg_agent",
+    "PGPPasswordDB",
+]
 
 
 def init_gpg():
@@ -27,8 +32,7 @@ def init_gpg():
     gnupg.GPG
         Initialized gpg wrapper.
     """
-    gpg = gnupg.GPG(gpgbinary='/usr/bin/gpg2',
-                    keyring='/home/alt/.gnupg/pubring.kbx')
+    gpg = gnupg.GPG(gpgbinary="/usr/bin/gpg2", keyring="/home/alt/.gnupg/pubring.kbx")
     return gpg
 
 
@@ -54,19 +58,21 @@ def scan_pgp_info_from_file(gpg, key_file):
     """
     keys = gpg.scan_keys(key_file)
     if not keys:
-        raise ValueError('there is no PGP key found')
+        raise ValueError("there is no PGP key found")
     key = keys[0]
-    return {'fingerprint': key['fingerprint'],
-            'keyid': key['keyid'],
-            'uid': key['uids'][0],
-            'date': datetime.date.fromtimestamp(float(key['date']))}
+    return {
+        "fingerprint": key["fingerprint"],
+        "keyid": key["keyid"],
+        "uid": key["uids"][0],
+        "date": datetime.date.fromtimestamp(float(key["date"])),
+    }
 
 
 def restart_gpg_agent():
     """
     Restarts gpg-agent.
     """
-    plumbum.local['gpgconf']['--reload', 'gpg-agent'].run(retcode=None)
+    plumbum.local["gpgconf"]["--reload", "gpg-agent"].run(retcode=None)
 
 
 def verify_pgp_key_password(gpg, keyid, password):
@@ -89,12 +95,10 @@ def verify_pgp_key_password(gpg, keyid, password):
     """
     # Clean all cached passwords.
     restart_gpg_agent()
-    return gpg.verify(
-        gpg.sign('test', keyid=keyid, passphrase=password).data).valid
+    return gpg.verify(gpg.sign("test", keyid=keyid, passphrase=password).data).valid
 
 
 class PGPPasswordDB(object):
-
     def __init__(self, gpg, keyids):
         """
         Password DB initialization.
@@ -119,23 +123,24 @@ class PGPPasswordDB(object):
             If a private GPG key is not found or an entered password is
             incorrect.
         """
-        existent_keys = {
-            key['keyid']: key for key in self.__gpg.list_keys(True)
-        }
+        existent_keys = {key["keyid"]: key for key in self.__gpg.list_keys(True)}
         for keyid in self.__keys:
             key = existent_keys.get(keyid)
             if not key:
-                raise ConfigurationError('PGP key {0} is not found in the '
-                                         'gnupg2 database'.format(keyid))
-            password = getpass.getpass('\nPlease enter the {0} PGP key '
-                                       'password: '.format(keyid))
+                raise ConfigurationError(
+                    "PGP key {0} is not found in the " "gnupg2 database".format(keyid)
+                )
+            password = getpass.getpass(
+                "\nPlease enter the {0} PGP key " "password: ".format(keyid)
+            )
             if not verify_pgp_key_password(self.__gpg, keyid, password):
-                raise ConfigurationError('PGP key {0} password is not valid'.
-                                         format(keyid))
-            self.__keys[keyid]['password'] = password
-            self.__keys[keyid]['fingerprint'] = key['fingerprint']
-            self.__keys[keyid]['subkeys'] = [
-                subkey[0] for subkey in key.get('subkeys', [])
+                raise ConfigurationError(
+                    "PGP key {0} password is not valid".format(keyid)
+                )
+            self.__keys[keyid]["password"] = password
+            self.__keys[keyid]["fingerprint"] = key["fingerprint"]
+            self.__keys[keyid]["subkeys"] = [
+                subkey[0] for subkey in key.get("subkeys", [])
             ]
 
     def get_password(self, keyid):
@@ -152,7 +157,7 @@ class PGPPasswordDB(object):
         str
             Password.
         """
-        return self.__keys[keyid]['password']
+        return self.__keys[keyid]["password"]
 
     def get_fingerprint(self, keyid):
         """
@@ -168,7 +173,7 @@ class PGPPasswordDB(object):
         str
             fingerprint.
         """
-        return self.__keys[keyid]['fingerprint']
+        return self.__keys[keyid]["fingerprint"]
 
     def get_subkeys(self, keyid):
         """
@@ -184,4 +189,4 @@ class PGPPasswordDB(object):
         list
             Subkey fingerprints.
         """
-        return self.__keys[keyid]['subkeys']
+        return self.__keys[keyid]["subkeys"]

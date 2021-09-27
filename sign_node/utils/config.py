@@ -15,7 +15,7 @@ import yaml
 
 from .file_utils import normalize_path
 
-__all__ = ['locate_config_file', 'BaseConfig']
+__all__ = ["locate_config_file", "BaseConfig"]
 
 
 class ConfigValidator(cerberus.Validator):
@@ -70,10 +70,9 @@ def locate_config_file(component, config_path=None):
     if config_path:
         config_path = normalize_path(config_path)
         if not os.path.exists(config_path):
-            raise ValueError('configuration file {0} is not found'.
-                             format(config_path))
+            raise ValueError("configuration file {0} is not found".format(config_path))
         return config_path
-    config_path = normalize_path('~/.config/{0}.yml'.format(component))
+    config_path = normalize_path("~/.config/{0}.yml".format(component))
     if os.path.exists(config_path):
         return config_path
 
@@ -82,8 +81,7 @@ class BaseConfig(object):
 
     """Base configuration object for Build System processes."""
 
-    def __init__(self, default_config, config_path=None, schema=None,
-                 **cmd_args):
+    def __init__(self, default_config, config_path=None, schema=None, **cmd_args):
         """
         Configuration object initialization.
 
@@ -112,7 +110,7 @@ class BaseConfig(object):
         self.__validate_config(schema)
 
     @staticmethod
-    def generate_node_id(postfix=''):
+    def generate_node_id(postfix=""):
         """
         Generates a node identifier based on a hostname and a process PID.
 
@@ -126,7 +124,7 @@ class BaseConfig(object):
         str
             Node identifier.
         """
-        return '{0}.{1}{2}'.format(platform.node(), os.getpid(), postfix)
+        return "{0}.{1}{2}".format(platform.node(), os.getpid(), postfix)
 
     def __dir__(self):
         return list(self.__config.keys())
@@ -137,14 +135,15 @@ class BaseConfig(object):
         raise AttributeError(attr)
 
     def __parse_config_file(self, config_path):
-        with open(config_path, 'rb') as fd:
+        with open(config_path, "rb") as fd:
             config = yaml.safe_load(fd)
             self.__config.update(config)
 
     def __validate_config(self, schema):
         validator = ConfigValidator(schema or {})
         if not validator.validate(self.__config):
-            error_list = ['{0}: {1}'.format(k, ', '.join(v))
-                          for k, v in validator.errors.items()]
-            raise ValueError('. '.join(error_list))
+            error_list = [
+                "{0}: {1}".format(k, ", ".join(v)) for k, v in validator.errors.items()
+            ]
+            raise ValueError(". ".join(error_list))
         self.__config = validator.document

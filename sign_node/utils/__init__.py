@@ -10,9 +10,7 @@ import signal
 
 
 class ExecLimit(object):
-
-    def __init__(self, seconds=60,
-                 raise_message='Execution exceed time limit'):
+    def __init__(self, seconds=60, raise_message="Execution exceed time limit"):
         """Context manager for limit some execution
 
         Args:

@@ -5,11 +5,12 @@
 from jira.client import JIRA
 
 
-__all__ = ['JiraServer']
+__all__ = ["JiraServer"]
 
 
 class JiraServer(object):
     """Jira server API wrapper."""
+
     def __init__(self, url, login, password):
         """
         Parameters
@@ -27,12 +28,14 @@ class JiraServer(object):
         self._jira_cli = None
 
     def __enter__(self):
-        self._jira_cli = JIRA({'server': self.__url},
-                              basic_auth=(self.__login, self.__password))
+        self._jira_cli = JIRA(
+            {"server": self.__url}, basic_auth=(self.__login, self.__password)
+        )
         return self
 
-    def create_issue(self, project, summary, description, priority, issuetype,
-                     **kwargs):
+    def create_issue(
+        self, project, summary, description, priority, issuetype, **kwargs
+    ):
         """
         Creates a new issue for the specified project.
 ​
@@ -63,9 +66,10 @@ class JiraServer(object):
             project=project,
             summary=summary,
             description=description,
-            priority={'name': priority},
-            issuetype={'name': issuetype},
-            **kwargs)
+            priority={"name": priority},
+            issuetype={"name": issuetype},
+            **kwargs
+        )
 
     def leave_comment(self, jira_key, comment_text):
         return self._jira_cli.add_comment(jira_key, comment_text)

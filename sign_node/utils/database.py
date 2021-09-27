@@ -13,8 +13,11 @@ import pymongo.errors
 
 from ..errors import ConnectionError
 
-__all__ = ['mongodb_connect', 'replace_dots_for_mongo_field',
-           'retrieve_dots_for_mongo_field']
+__all__ = [
+    "mongodb_connect",
+    "replace_dots_for_mongo_field",
+    "retrieve_dots_for_mongo_field",
+]
 
 
 def mongodb_connect(database_name, database_url):
@@ -43,8 +46,11 @@ def mongodb_connect(database_name, database_url):
         return mongo_client[database_name]
     except pymongo.errors.ConnectionFailure as e:
         err_str = str(e)
-        logging.error('can\'t connect to the "{0}" database ({1}): {2}'.
-                      format(database_name, database_url, err_str))
+        logging.error(
+            'can\'t connect to the "{0}" database ({1}): {2}'.format(
+                database_name, database_url, err_str
+            )
+        )
         raise ConnectionError(err_str)
 
 
@@ -59,7 +65,7 @@ def replace_dots_for_mongo_field(raw_string):
     -------
     string
     """
-    return raw_string.replace('.', '___DOT___')
+    return raw_string.replace(".", "___DOT___")
 
 
 def retrieve_dots_for_mongo_field(mongo_string):
@@ -73,4 +79,4 @@ def retrieve_dots_for_mongo_field(mongo_string):
     -------
     string
     """
-    return mongo_string.replace('___DOT___', '.')
+    return mongo_string.replace("___DOT___", ".")

@@ -28,24 +28,47 @@ import createrepo_c
 
 from castor.errors import LockError
 from castor.utils.debian_utils import parse_deb_version
-from castor.utils.file_utils import download_file, hash_file, safe_mkdir, \
-    urljoin_path
+from castor.utils.file_utils import download_file, hash_file, safe_mkdir, urljoin_path
 from castor.utils.hashing import get_hasher
 
 
-__all__ = ['CachedRepodata', 'CachedDebRepodata', 'RPMPackageMeta',
-           'DebPackageMeta', 'DebSrcPackageMeta']
+__all__ = [
+    "CachedRepodata",
+    "CachedDebRepodata",
+    "RPMPackageMeta",
+    "DebPackageMeta",
+    "DebSrcPackageMeta",
+]
 
 
 class RPMPackageMeta(object):
 
     """RPM package metadata wrapper."""
 
-    __slots__ = ['name', 'epoch', 'version', 'release', 'arch',
-                 'location_href', 'checksum', 'checksum_type', 'sourcerpm']
+    __slots__ = [
+        "name",
+        "epoch",
+        "version",
+        "release",
+        "arch",
+        "location_href",
+        "checksum",
+        "checksum_type",
+        "sourcerpm",
+    ]
 
-    def __init__(self, name, epoch, version, release, arch, location_href,
-                 checksum, checksum_type, sourcerpm=None):
+    def __init__(
+        self,
+        name,
+        epoch,
+        version,
+        release,
+        arch,
+        location_href,
+        checksum,
+        checksum_type,
+        sourcerpm=None,
+    ):
         """
         RPM package metadata initialization.
 
@@ -73,19 +96,40 @@ class RPMPackageMeta(object):
         self.sourcerpm = sourcerpm
 
     def __repr__(self):
-        return '<RPMPackageMeta({p.name!r}, {p.epoch!r}, {p.version!r}, ' \
-               '{p.release!r}, {p.arch!r})>'.format(p=self)
+        return (
+            "<RPMPackageMeta({p.name!r}, {p.epoch!r}, {p.version!r}, "
+            "{p.release!r}, {p.arch!r})>".format(p=self)
+        )
 
 
 class DebPackageMeta(object):
 
     """Debian package metadata wrapper."""
 
-    __slots__ = ['name', 'epoch', 'version', 'revision', 'arch',
-                 'location_href', 'checksum', 'checksum_type', 'source']
+    __slots__ = [
+        "name",
+        "epoch",
+        "version",
+        "revision",
+        "arch",
+        "location_href",
+        "checksum",
+        "checksum_type",
+        "source",
+    ]
 
-    def __init__(self, name, epoch, version, revision, arch, location_href,
-                 checksum, checksum_type, source=None):
+    def __init__(
+        self,
+        name,
+        epoch,
+        version,
+        revision,
+        arch,
+        location_href,
+        checksum,
+        checksum_type,
+        source=None,
+    ):
         self.name = name
         self.epoch = epoch
         self.version = version
@@ -102,24 +146,36 @@ class DebPackageMeta(object):
             #   Source: linux-latest (105+deb10u1)
             # Source package:
             #   Package: linux-latest
-            source = re.sub(r'\s+(.*)$', '', source)
+            source = re.sub(r"\s+(.*)$", "", source)
         self.source = source
 
     def __repr__(self):
-        return '<DebPackageMeta({p.name!r}, {p.epoch!r}, {p.version!r},' \
-               '{p.revision!r}, {p.arch!r}), {p.location_href!r}>'.format(
-                   p=self)
+        return (
+            "<DebPackageMeta({p.name!r}, {p.epoch!r}, {p.version!r},"
+            "{p.revision!r}, {p.arch!r}), {p.location_href!r}>".format(p=self)
+        )
 
 
 class DebSrcPackageMeta(object):
 
     """Debian src package metadata wrapper."""
 
-    __slots__ = ['name', 'epoch', 'version', 'revision', 'arch', 'files',
-                 'checksum', 'checksum_type', 'source', 'directory']
+    __slots__ = [
+        "name",
+        "epoch",
+        "version",
+        "revision",
+        "arch",
+        "files",
+        "checksum",
+        "checksum_type",
+        "source",
+        "directory",
+    ]
 
-    def __init__(self, name, epoch, version, revision, arch, files,
-                 checksum_type, directory):
+    def __init__(
+        self, name, epoch, version, revision, arch, files, checksum_type, directory
+    ):
         self.name = name
         self.epoch = epoch
         self.version = version
@@ -131,24 +187,24 @@ class DebSrcPackageMeta(object):
         self.source = None
 
     def __repr__(self):
-        return '<DebSrcPackageMeta({p.name!r}, {p.epoch!r}, {p.version!r},' \
-               '{p.revision!r}, {p.arch!r})>'.format(p=self)
+        return (
+            "<DebSrcPackageMeta({p.name!r}, {p.epoch!r}, {p.version!r},"
+            "{p.revision!r}, {p.arch!r})>".format(p=self)
+        )
 
 
 class BaseCachedRepodata(object, metaclass=abc.ABCMeta):
-
     def __init__(self, cache_base_dir, hashable_url, lock_timeout):
         self._log = logging.getLogger(__name__)
         self.__lock_timeout = lock_timeout
-        url_hash = hashlib.sha256(hashable_url.encode('utf-8')).hexdigest()
+        url_hash = hashlib.sha256(hashable_url.encode("utf-8")).hexdigest()
         self.__cache_dir = os.path.join(cache_base_dir, url_hash)
         safe_mkdir(self.__cache_dir)
-        self.__lock_path = os.path.join(cache_base_dir,
-                                        '{0}.lock'.format(url_hash))
+        self.__lock_path = os.path.join(cache_base_dir, "{0}.lock".format(url_hash))
         self.__lock_fd = None
 
     def __enter__(self):
-        self.__lock_fd = open(self.__lock_path, 'wb')
+        self.__lock_fd = open(self.__lock_path, "wb")
         start_time = time.time()
         while True:
             try:
@@ -159,21 +215,25 @@ class BaseCachedRepodata(object, metaclass=abc.ABCMeta):
             except IOError as e:
                 if e.errno != errno.EAGAIN:
                     self.__finalize()
-                    self._log.error('can not obtain {0} lock: {1}. '
-                                    'Traceback:\n{2}'.
-                                    format(self.__lock_path, str(e),
-                                           traceback.format_exc()))
+                    self._log.error(
+                        "can not obtain {0} lock: {1}. "
+                        "Traceback:\n{2}".format(
+                            self.__lock_path, str(e), traceback.format_exc()
+                        )
+                    )
                     raise e
                 elif (time.time() - start_time) >= self.__lock_timeout:
                     self.__finalize()
-                    raise LockError('timeout occurred')
+                    raise LockError("timeout occurred")
                 time.sleep(1)
             except Exception as e:
                 self.__finalize()
-                self._log.error('can not obtain {0} lock: {1}. '
-                                'Traceback:\n{2}'.
-                                format(self.__lock_path, str(e),
-                                       traceback.format_exc()))
+                self._log.error(
+                    "can not obtain {0} lock: {1}. "
+                    "Traceback:\n{2}".format(
+                        self.__lock_path, str(e), traceback.format_exc()
+                    )
+                )
                 raise e
         return self
 
@@ -194,32 +254,33 @@ class BaseCachedRepodata(object, metaclass=abc.ABCMeta):
         extracted_path : str
             Extracted file path.
         """
-        re_rslt = re.search(r'\.(bz2|gz|xz)$', archive_path,
-                            flags=re.IGNORECASE)
+        re_rslt = re.search(r"\.(bz2|gz|xz)$", archive_path, flags=re.IGNORECASE)
         if not re_rslt:
-            raise Exception('unsupported archive type')
+            raise Exception("unsupported archive type")
         archive_type = re_rslt.group(1).lower()
-        if archive_type == 'gz':
-            with gzip.open(archive_path, 'rb') as in_fd:
-                with open(extracted_path, 'wb') as out_fd:
+        if archive_type == "gz":
+            with gzip.open(archive_path, "rb") as in_fd:
+                with open(extracted_path, "wb") as out_fd:
                     shutil.copyfileobj(in_fd, out_fd)
         else:
-            if archive_type == 'bz2':
+            if archive_type == "bz2":
                 decompressor = bz2.BZ2Decompressor()
             else:
                 decompressor = lzma.LZMADecompressor()
-            with open(archive_path, 'rb') as in_fd:
-                with open(extracted_path, 'wb') as out_fd:
-                    for data in iter(lambda: in_fd.read(100 * 1024), b''):
+            with open(archive_path, "rb") as in_fd:
+                with open(extracted_path, "wb") as out_fd:
+                    for data in iter(lambda: in_fd.read(100 * 1024), b""):
                         out_fd.write(decompressor.decompress(data))
 
     @staticmethod
     def ensure_context(fn):
         def wrapped_fn(self, *args, **kwargs):
             if not self.__lock_fd:
-                raise Exception('the function must be called inside the with '
-                                'statement')
+                raise Exception(
+                    "the function must be called inside the with " "statement"
+                )
             return fn(self, *args, **kwargs)
+
         return wrapped_fn
 
     def __exit__(self, exc_type, exc_val, exc_tb):
@@ -237,9 +298,15 @@ class BaseCachedRepodata(object, metaclass=abc.ABCMeta):
 
 
 class CachedRepodata(BaseCachedRepodata):
-
-    def __init__(self, url, cache_base_dir, ssl_cert=None, ssl_key=None,
-                 ca_info=None, lock_timeout=120):
+    def __init__(
+        self,
+        url,
+        cache_base_dir,
+        ssl_cert=None,
+        ssl_key=None,
+        ca_info=None,
+        lock_timeout=120,
+    ):
         """
         Cached repodata initialization.
 
@@ -264,13 +331,13 @@ class CachedRepodata(BaseCachedRepodata):
         self.__ca_info = ca_info
         self.__lock_timeout = lock_timeout
         super(CachedRepodata, self).__init__(cache_base_dir, url, lock_timeout)
-        self.__repodata_dir = os.path.join(self._cache_dir, 'repodata')
+        self.__repodata_dir = os.path.join(self._cache_dir, "repodata")
         safe_mkdir(self.__repodata_dir)
         self._repodata = None
 
     @BaseCachedRepodata.ensure_context
     def iter_packages(self):
-        if 'primary' in self._repodata:
+        if "primary" in self._repodata:
             return self._iter_packages_xml()
         else:
             return self._iter_packages_sqlite()
@@ -283,12 +350,12 @@ class CachedRepodata(BaseCachedRepodata):
     def _iter_packages_sqlite(self):
         tmp_dir = None
         try:
-            primary_rec = self._repodata['primary_db']
-            primary_path = primary_rec['path']
+            primary_rec = self._repodata["primary_db"]
+            primary_path = primary_rec["path"]
             if self._is_archive(primary_path):
                 tmp_dir = tempfile.mkdtemp(dir=self._cache_dir)
                 archive_path = primary_path
-                primary_path = os.path.join(tmp_dir, 'primary.sqlite')
+                primary_path = os.path.join(tmp_dir, "primary.sqlite")
                 self._unpack_archive(archive_path, primary_path)
             sql = """SELECT pkgKey, pkgId as checksum, name, epoch, version,
                             release, arch, location_href, checksum_type,
@@ -303,12 +370,19 @@ class CachedRepodata(BaseCachedRepodata):
                             value = row[i]
                             if value is None:
                                 continue
-                            elif key in ('name', 'epoch', 'version', 'release',
-                                         'arch', 'location_href', 'checksum',
-                                         'checksum_type'):
+                            elif key in (
+                                "name",
+                                "epoch",
+                                "version",
+                                "release",
+                                "arch",
+                                "location_href",
+                                "checksum",
+                                "checksum_type",
+                            ):
                                 pkg[key] = value
-                            elif key == 'rpm_sourcerpm' and value:
-                                pkg['sourcerpm'] = value
+                            elif key == "rpm_sourcerpm" and value:
+                                pkg["sourcerpm"] = value
                         yield RPMPackageMeta(**pkg)
         finally:
             if tmp_dir and os.path.exists(tmp_dir):
@@ -320,13 +394,17 @@ class CachedRepodata(BaseCachedRepodata):
         metadata.locate_and_load_xml(self._cache_dir)
         for key in metadata.keys():
             pkg = metadata.get(key)
-            yield RPMPackageMeta(name=pkg.name, epoch=pkg.epoch,
-                                 version=pkg.version, release=pkg.release,
-                                 arch=pkg.arch,
-                                 location_href=pkg.location_href,
-                                 checksum=pkg.pkgId,
-                                 checksum_type=pkg.checksum_type,
-                                 sourcerpm=pkg.rpm_sourcerpm)
+            yield RPMPackageMeta(
+                name=pkg.name,
+                epoch=pkg.epoch,
+                version=pkg.version,
+                release=pkg.release,
+                arch=pkg.arch,
+                location_href=pkg.location_href,
+                checksum=pkg.pkgId,
+                checksum_type=pkg.checksum_type,
+                sourcerpm=pkg.rpm_sourcerpm,
+            )
 
     @BaseCachedRepodata.ensure_context
     def _actualize_cache(self):
@@ -339,11 +417,11 @@ class CachedRepodata(BaseCachedRepodata):
             Repository metadata information.
         """
         repomd_path = self._download_repomd()
-        repodata = {'repomd': {'path': repomd_path}}
+        repodata = {"repomd": {"path": repomd_path}}
         repomd = createrepo_c.Repomd(repomd_path)
         for repomd_rec in repomd:
             rec = self._download_repodata_file(repomd_rec)
-            repodata[rec['type']] = rec
+            repodata[rec["type"]] = rec
         self._repodata = repodata
 
     def _download_repomd(self):
@@ -355,13 +433,17 @@ class CachedRepodata(BaseCachedRepodata):
         str
             Downloaded repomd.xml file path.
         """
-        repomd_path = os.path.join(self.__repodata_dir, 'repomd.xml')
+        repomd_path = os.path.join(self.__repodata_dir, "repomd.xml")
         prev_checksum = None
         if os.path.exists(repomd_path):
             prev_checksum = hash_file(repomd_path, hashlib.sha256())
-        download_file(urllib.parse.urljoin(self.__url, 'repodata/repomd.xml'),
-                      repomd_path, ssl_cert=self.__ssl_cert,
-                      ssl_key=self.__ssl_key, ca_info=self.__ca_info)
+        download_file(
+            urllib.parse.urljoin(self.__url, "repodata/repomd.xml"),
+            repomd_path,
+            ssl_cert=self.__ssl_cert,
+            ssl_key=self.__ssl_key,
+            ca_info=self.__ca_info,
+        )
         new_checksum = hash_file(repomd_path, hashlib.sha256())
         if new_checksum != prev_checksum:
             self._cleanup_outdated_repodata(self.__repodata_dir)
@@ -385,19 +467,29 @@ class CachedRepodata(BaseCachedRepodata):
         hasher = get_hasher(checksum_type)
         file_name = os.path.basename(repomd_rec.location_href)
         file_path = os.path.join(self.__repodata_dir, file_name)
-        if not os.path.exists(file_path) or \
-                hash_file(file_path, hasher) != repomd_rec.checksum:
+        if (
+            not os.path.exists(file_path)
+            or hash_file(file_path, hasher) != repomd_rec.checksum
+        ):
             file_url = urllib.parse.urljoin(self.__url, repomd_rec.location_href)
-            download_file(file_url, file_path, ssl_cert=self.__ssl_cert,
-                          ssl_key=self.__ssl_key, ca_info=self.__ca_info)
+            download_file(
+                file_url,
+                file_path,
+                ssl_cert=self.__ssl_cert,
+                ssl_key=self.__ssl_key,
+                ca_info=self.__ca_info,
+            )
             checksum = hash_file(file_path, get_hasher(checksum_type))
             if checksum != repomd_rec.checksum:
-                raise Exception('downloaded file {0} checksum is wrong'.
-                                format(file_path))
-        return {'path': file_path,
-                'checksum': repomd_rec.checksum,
-                'checksum_type': checksum_type,
-                'type': repomd_rec.type}
+                raise Exception(
+                    "downloaded file {0} checksum is wrong".format(file_path)
+                )
+        return {
+            "path": file_path,
+            "checksum": repomd_rec.checksum,
+            "checksum_type": checksum_type,
+            "type": repomd_rec.type,
+        }
 
     @staticmethod
     def _cleanup_outdated_repodata(repodata_dir):
@@ -410,7 +502,7 @@ class CachedRepodata(BaseCachedRepodata):
             Repodata directory.
         """
         for file_name in os.listdir(repodata_dir):
-            if file_name != 'repomd.xml':
+            if file_name != "repomd.xml":
                 os.remove(os.path.join(repodata_dir, file_name))
 
     @staticmethod
@@ -428,7 +520,7 @@ class CachedRepodata(BaseCachedRepodata):
         bool
             True if a specified file is an archive, False otherwise.
         """
-        re_rslt = re.search(r'\.(bz2|gz|xz)$', file_path, flags=re.IGNORECASE)
+        re_rslt = re.search(r"\.(bz2|gz|xz)$", file_path, flags=re.IGNORECASE)
         return True if re_rslt else False
 
     @staticmethod
@@ -443,30 +535,27 @@ class CachedRepodata(BaseCachedRepodata):
         extracted_path : str
             Extracted file path.
         """
-        re_rslt = re.search(r'\.(bz2|gz|xz)$', archive_path,
-                            flags=re.IGNORECASE)
+        re_rslt = re.search(r"\.(bz2|gz|xz)$", archive_path, flags=re.IGNORECASE)
         if not re_rslt:
-            raise Exception('unsupported archive type')
+            raise Exception("unsupported archive type")
         archive_type = re_rslt.group(1).lower()
-        if archive_type == 'gz':
-            with gzip.open(archive_path, 'rb') as in_fd:
-                with open(extracted_path, 'wb') as out_fd:
+        if archive_type == "gz":
+            with gzip.open(archive_path, "rb") as in_fd:
+                with open(extracted_path, "wb") as out_fd:
                     shutil.copyfileobj(in_fd, out_fd)
         else:
-            if archive_type == 'bz2':
+            if archive_type == "bz2":
                 decompressor = bz2.BZ2Decompressor()
             else:
                 decompressor = lzma.LZMADecompressor()
-            with open(archive_path, 'rb') as in_fd:
-                with open(extracted_path, 'wb') as out_fd:
-                    for data in iter(lambda: in_fd.read(100 * 1024), b''):
+            with open(archive_path, "rb") as in_fd:
+                with open(extracted_path, "wb") as out_fd:
+                    for data in iter(lambda: in_fd.read(100 * 1024), b""):
                         out_fd.write(decompressor.decompress(data))
 
 
 class CachedDebRepodata(BaseCachedRepodata):
-
-    def __init__(self, url, distro, component, arch, cache_base_dir,
-                 lock_timeout=120):
+    def __init__(self, url, distro, component, arch, cache_base_dir, lock_timeout=120):
         """
         Cached Debian repository repodata initialization.
 
@@ -489,22 +578,21 @@ class CachedDebRepodata(BaseCachedRepodata):
         self.__distro = distro
         self.__component = component
         self.__arch = arch
-        if arch == 'src':
-            self.__arch_dir = 'source'
-            self.__index_file_name = 'Sources'
+        if arch == "src":
+            self.__arch_dir = "source"
+            self.__index_file_name = "Sources"
         else:
-            self.__arch_dir = 'binary-{0}'.format(arch)
-            self.__index_file_name = 'Packages'
-        hashable_url = urljoin_path(url, 'dists', distro, component,
-                                    self.__arch_dir)
-        super(CachedDebRepodata, self).__init__(cache_base_dir, hashable_url,
-                                                lock_timeout)
-        self.__index_file_path = os.path.join(self._cache_dir,
-                                              self.__index_file_name)
+            self.__arch_dir = "binary-{0}".format(arch)
+            self.__index_file_name = "Packages"
+        hashable_url = urljoin_path(url, "dists", distro, component, self.__arch_dir)
+        super(CachedDebRepodata, self).__init__(
+            cache_base_dir, hashable_url, lock_timeout
+        )
+        self.__index_file_path = os.path.join(self._cache_dir, self.__index_file_name)
 
     @BaseCachedRepodata.ensure_context
     def iter_packages(self):
-        if self.__arch == 'src':
+        if self.__arch == "src":
             return self.iter_source_packages()
         else:
             return self.iter_binary_packages()
@@ -513,95 +601,106 @@ class CachedDebRepodata(BaseCachedRepodata):
     def iter_source_packages(self):
         package = {}
         current_section = None
-        with open(self.__index_file_path, 'r') as fd:
+        with open(self.__index_file_path, "r") as fd:
             for line in fd:
                 line = line.strip()
-                section_name = re.search(r'(.*):$', line)
+                section_name = re.search(r"(.*):$", line)
                 if section_name:
                     current_section = section_name.group(1)
                     package[current_section] = []
                     continue
-                elif line == '':
-                    if 'Checksums-Sha256' in package:
-                        files = package['Checksums-Sha256']
-                        checksum_type = 'sha256'
+                elif line == "":
+                    if "Checksums-Sha256" in package:
+                        files = package["Checksums-Sha256"]
+                        checksum_type = "sha256"
                     else:
-                        checksum_type = 'sha1'
-                        files = package['Checksums-Sha1']
-                    epoch, version, revision = parse_deb_version(
-                        package['Version'])
+                        checksum_type = "sha1"
+                        files = package["Checksums-Sha1"]
+                    epoch, version, revision = parse_deb_version(package["Version"])
                     yield DebSrcPackageMeta(
-                        package['Package'], epoch, version, revision,
-                        'src', files, checksum_type, package['Directory']
+                        package["Package"],
+                        epoch,
+                        version,
+                        revision,
+                        "src",
+                        files,
+                        checksum_type,
+                        package["Directory"],
                     )
                     package = {}
                     current_section = None
-                re_rslt = re.search(r'^([\w-]+):\s+(.+?)$', line)
+                re_rslt = re.search(r"^([\w-]+):\s+(.+?)$", line)
                 if re_rslt:
                     key, value = re_rslt.groups()
                     package[key] = value
                     current_section = None
                 if current_section is not None:
-                    if current_section == 'Package-List':
+                    if current_section == "Package-List":
                         package_name = line.split()[0]
                         package[current_section].append(package_name)
                     else:
                         checksum, size, filename = line.split()
-                        package[current_section].append({
-                            'checksum': checksum, 'filename': filename})
+                        package[current_section].append(
+                            {"checksum": checksum, "filename": filename}
+                        )
 
     @BaseCachedRepodata.ensure_context
     def iter_binary_packages(self):
         package = {}
-        with open(self.__index_file_path, 'r') as fd:
+        with open(self.__index_file_path, "r") as fd:
             for line in fd:
                 line = line.strip()
-                if line == '':
-                    if 'SHA256' in package:
-                        checksum = package['SHA256']
-                        checksum_type = 'sha256'
-                    elif 'SHA1' in package:
-                        checksum = package['SHA1']
-                        checksum_type = 'sha1'
+                if line == "":
+                    if "SHA256" in package:
+                        checksum = package["SHA256"]
+                        checksum_type = "sha256"
+                    elif "SHA1" in package:
+                        checksum = package["SHA1"]
+                        checksum_type = "sha1"
                     else:
                         continue
-                    epoch, version, revision = \
-                        parse_deb_version(package['Version'])
-                    yield DebPackageMeta(package['Package'], epoch, version,
-                                         revision, package['Architecture'],
-                                         package['Filename'], checksum,
-                                         checksum_type, package.get('Source'))
+                    epoch, version, revision = parse_deb_version(package["Version"])
+                    yield DebPackageMeta(
+                        package["Package"],
+                        epoch,
+                        version,
+                        revision,
+                        package["Architecture"],
+                        package["Filename"],
+                        checksum,
+                        checksum_type,
+                        package.get("Source"),
+                    )
                     package = {}
-                re_rslt = re.search(r'^([\w-]+):\s+(.+?)$', line)
+                re_rslt = re.search(r"^([\w-]+):\s+(.+?)$", line)
                 if re_rslt:
                     key, value = re_rslt.groups()
                     package[key] = value
 
     @BaseCachedRepodata.ensure_context
     def get_download_url(self, package, filename=None):
-        if package.arch != 'src':
+        if package.arch != "src":
             return urljoin_path(self.__url, package.location_href)
-        return urljoin_path(
-            self.__url, package.directory, filename)
+        return urljoin_path(self.__url, package.directory, filename)
 
     def _actualize_cache(self):
         """
         Updates the repository Release and Packages/Sources files cache.
         """
-        print('Cache dir:', self._cache_dir)
-        release_file_url = urljoin_path(self.__url, 'dists', self.__distro,
-                                        'Release')
-        release_file_path = os.path.join(self._cache_dir, 'Release')
+        print("Cache dir:", self._cache_dir)
+        release_file_url = urljoin_path(self.__url, "dists", self.__distro, "Release")
+        release_file_path = os.path.join(self._cache_dir, "Release")
         download_file(release_file_url, release_file_path)
-        index_rel_path = os.path.join(self.__component, self.__arch_dir,
-                                      self.__index_file_name)
-        release_data = self._parse_release_file(release_file_path,
-                                                index_rel_path)
-        checksum_type = release_data[self.__index_file_name]['checksum_type']
-        checksum = release_data[self.__index_file_name]['checksum']
-        if not os.path.exists(self.__index_file_path) or \
-                hash_file(self.__index_file_path,
-                          get_hasher(checksum_type)) != checksum:
+        index_rel_path = os.path.join(
+            self.__component, self.__arch_dir, self.__index_file_name
+        )
+        release_data = self._parse_release_file(release_file_path, index_rel_path)
+        checksum_type = release_data[self.__index_file_name]["checksum_type"]
+        checksum = release_data[self.__index_file_name]["checksum"]
+        if (
+            not os.path.exists(self.__index_file_path)
+            or hash_file(self.__index_file_path, get_hasher(checksum_type)) != checksum
+        ):
             self._download_index_file(release_data)
 
     def _download_index_file(self, release_data):
@@ -613,26 +712,29 @@ class CachedDebRepodata(BaseCachedRepodata):
         release_data : dict
             Index files information from a Release file.
         """
-        pattern = r'{0}\.(bz2|gz|xz)'.format(self.__index_file_name)
+        pattern = r"{0}\.(bz2|gz|xz)".format(self.__index_file_name)
         for file_name in release_data.keys():
             if not re.search(pattern, file_name, flags=re.IGNORECASE):
                 continue
             tarball_path = os.path.join(self._cache_dir, file_name)
-            tarball_url = urljoin_path(self.__url, 'dists', self.__distro,
-                                       release_data[file_name]['path'])
+            tarball_url = urljoin_path(
+                self.__url, "dists", self.__distro, release_data[file_name]["path"]
+            )
             download_file(tarball_url, tarball_path)
             self._unpack_archive(tarball_path, self.__index_file_path)
             os.remove(tarball_path)
-            checksum = release_data[self.__index_file_name]['checksum']
-            checksum_type = \
-                release_data[self.__index_file_name]['checksum_type']
-            if hash_file(self.__index_file_path,
-                         get_hasher(checksum_type)) != checksum:
-                raise Exception('downloaded file {0} checksum is wrong'.
-                                format(self.__index_file_path))
+            checksum = release_data[self.__index_file_name]["checksum"]
+            checksum_type = release_data[self.__index_file_name]["checksum_type"]
+            if hash_file(self.__index_file_path, get_hasher(checksum_type)) != checksum:
+                raise Exception(
+                    "downloaded file {0} checksum is wrong".format(
+                        self.__index_file_path
+                    )
+                )
             return
-        raise Exception('{0} file is not found in release data'.
-                        format(self.__index_file_name))
+        raise Exception(
+            "{0} file is not found in release data".format(self.__index_file_name)
+        )
 
     @staticmethod
     def _parse_release_file(path, index_rel_path):
@@ -653,25 +755,24 @@ class CachedDebRepodata(BaseCachedRepodata):
         """
         data = {}
         sha256_found = False
-        with open(path, 'r') as fd:
+        with open(path, "r") as fd:
             for line in fd:
-                if line.startswith('SHA256:'):
+                if line.startswith("SHA256:"):
                     sha256_found = True
                     continue
-                elif re.search(r'^\w+.*?:', line) or not sha256_found:
+                elif re.search(r"^\w+.*?:", line) or not sha256_found:
                     sha256_found = False
                     continue
-                re_rslt = re.search(
-                    r'\s+([a-zA-Z0-9]+)\s+(\d+)\s+(.*?)$', line)
-                if not re_rslt or \
-                        not re_rslt.group(3).startswith(index_rel_path):
+                re_rslt = re.search(r"\s+([a-zA-Z0-9]+)\s+(\d+)\s+(.*?)$", line)
+                if not re_rslt or not re_rslt.group(3).startswith(index_rel_path):
                     continue
                 checksum, _, file_path = re_rslt.groups()
                 file_name = os.path.basename(file_path)
-                data[file_name] = {'checksum': checksum,
-                                   'checksum_type': 'sha256',
-                                   'path': file_path}
+                data[file_name] = {
+                    "checksum": checksum,
+                    "checksum_type": "sha256",
+                    "path": file_path,
+                }
         if not data or os.path.basename(index_rel_path) not in data:
-            raise Exception('can not find {0} in a Release file'.
-                            format(index_rel_path))
+            raise Exception("can not find {0} in a Release file".format(index_rel_path))
         return data

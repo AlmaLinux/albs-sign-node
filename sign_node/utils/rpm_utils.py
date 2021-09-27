@@ -19,11 +19,26 @@ from castor.errors import CommandExecutionError
 from castor.ported import unique, to_unicode
 
 
-__all__ = ['srpm_cpio_sha256sum', 'unpack_src_rpm', 'compare_rpm_packages',
-           'string_to_version', 'flag_to_string', 'compare_evr', 'is_pre_req',
-           'get_rpm_property', 'init_metadata', 'get_files_from_package',
-           'split_filename', 'is_rpm_file', 'evr_to_string', 'evrtofloat',
-           'to_str_fixing_len', 'split_segments', 'int_to', 'char_to']
+__all__ = [
+    "srpm_cpio_sha256sum",
+    "unpack_src_rpm",
+    "compare_rpm_packages",
+    "string_to_version",
+    "flag_to_string",
+    "compare_evr",
+    "is_pre_req",
+    "get_rpm_property",
+    "init_metadata",
+    "get_files_from_package",
+    "split_filename",
+    "is_rpm_file",
+    "evr_to_string",
+    "evrtofloat",
+    "to_str_fixing_len",
+    "split_segments",
+    "int_to",
+    "char_to",
+]
 
 
 def srpm_cpio_sha256sum(srpm_path):
@@ -51,13 +66,13 @@ def srpm_cpio_sha256sum(srpm_path):
     pipelines containing 3 or more commands (see AL-3388) so we had to use
     subprocess.Popen here.
     """
-    cmd = 'rpm2cpio {0} | cpio -i --to-stdout --quiet | sha256sum'.\
-        format(srpm_path)
-    proc = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE,
-                            stderr=subprocess.PIPE)
+    cmd = "rpm2cpio {0} | cpio -i --to-stdout --quiet | sha256sum".format(srpm_path)
+    proc = subprocess.Popen(
+        cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE
+    )
     out, err = proc.communicate()
     if proc.returncode != 0:
-        message = 'Can not calculate checksum: {0}'.format(err)
+        message = "Can not calculate checksum: {0}".format(err)
         raise CommandExecutionError(message, proc.returncode, out, err, cmd)
     return out.split()[0]
 
@@ -78,17 +93,17 @@ def unpack_src_rpm(srpm_path, target_dir):
     castor.errors.CommandExecutionError
         If an unpacking command failed.
     """
-    pipe = (plumbum.local["rpm2cpio"][srpm_path] |
-            plumbum.local["cpio"]["-idmv", "--no-absolute-filenames"])
-    proc = pipe.popen(cwd=target_dir,
-                      env={'HISTFILE': '/dev/null', 'LANG': 'C'})
+    pipe = (
+        plumbum.local["rpm2cpio"][srpm_path]
+        | plumbum.local["cpio"]["-idmv", "--no-absolute-filenames"]
+    )
+    proc = pipe.popen(cwd=target_dir, env={"HISTFILE": "/dev/null", "LANG": "C"})
     out, err = proc.communicate()
     if proc.returncode != 0:
-        msg = 'Can not unpack src-RPM: {0}'.format(err)
+        msg = "Can not unpack src-RPM: {0}".format(err)
         if not os.path.exists(srpm_path) or not os.path.getsize(srpm_path):
-            msg = 'src-RPM file is missing or empty.\n{}'.format(msg)
-        raise CommandExecutionError(msg, proc.returncode,
-                                    out, err, pipe.formulate())
+            msg = "src-RPM file is missing or empty.\n{}".format(msg)
+        raise CommandExecutionError(msg, proc.returncode, out, err, pipe.formulate())
 
 
 def compare_rpm_packages(package_a, package_b):
@@ -110,8 +125,8 @@ def compare_rpm_packages(package_a, package_b):
         and 0 if both versions are equal.
     """
     return rpm.labelCompare(
-        (package_a['epoch'], package_a['version'], package_a['release']),
-        (package_b['epoch'], package_b['version'], package_b['release'])
+        (package_a["epoch"], package_a["version"], package_a["release"]),
+        (package_b["epoch"], package_b["version"], package_b["release"]),
     )
 
 
@@ -128,31 +143,31 @@ def string_to_version(verstring):
     tuple
         tuple of parsed version of rpm
     """
-    if verstring in [None, '', b'']:
+    if verstring in [None, "", b""]:
         return None, None, None
     if isinstance(verstring, bytes):
-        verstring = verstring.decode('utf-8')
-    i = verstring.find(':')
+        verstring = verstring.decode("utf-8")
+    i = verstring.find(":")
     if i != -1:
         try:
             epoch = str(int(verstring[:i]))
         except ValueError:
             # look, garbage in the epoch field, how fun, kill it
-            epoch = '0'  # this is our fallback, deal
+            epoch = "0"  # this is our fallback, deal
     else:
-        epoch = '0'
-    j = verstring.find('-')
+        epoch = "0"
+    j = verstring.find("-")
     if j != -1:
-        if verstring[i + 1:j] == '':
+        if verstring[i + 1 : j] == "":
             version = None
         else:
-            version = verstring[i + 1:j]
-        release = verstring[j + 1:]
+            version = verstring[i + 1 : j]
+        release = verstring[j + 1 :]
     else:
-        if verstring[i + 1:] == '':
+        if verstring[i + 1 :] == "":
             version = None
         else:
-            version = verstring[i + 1:]
+            version = verstring[i + 1 :]
         release = None
     return epoch, version, release
 
@@ -170,9 +185,8 @@ def flag_to_string(flags):
         If we can interpret output number we did it,
         otherwise return truncated arg
     """
-    flags = flags & 0xf
-    res = {0: None, 2: 'LT', 4: 'GT',
-           8: 'EQ', 10: 'LE', 12: 'GE'}
+    flags = flags & 0xF
+    res = {0: None, 2: "LT", 4: "GT", 8: "EQ", 10: "LE", 12: "GE"}
 
     if flags in res:
         return res[flags]
@@ -186,13 +200,13 @@ def compare_evr(evr1, evr2):
     e1, v1, r1 = evr1
     e2, v2, r2 = evr2
     if e1 is None:
-        e1 = '0'
+        e1 = "0"
     else:
         e1 = str(e1)
     v1 = str(v1)
     r1 = str(r1)
     if e2 is None:
-        e2 = '0'
+        e2 = "0"
     else:
         e2 = str(e2)
     v2 = str(v2)
@@ -215,9 +229,9 @@ def is_pre_req(flag):
     """
     if flag is not None:
         # Note: RPMSENSE_PREREQ == 0 since rpm-4.4'ish
-        if flag & (rpm.RPMSENSE_PREREQ |
-                   rpm.RPMSENSE_SCRIPT_PRE |
-                   rpm.RPMSENSE_SCRIPT_POST):
+        if flag & (
+            rpm.RPMSENSE_PREREQ | rpm.RPMSENSE_SCRIPT_PRE | rpm.RPMSENSE_SCRIPT_POST
+        ):
             return 1
     return 0
 
@@ -237,26 +251,36 @@ def get_rpm_property(hdr, rpm_property):
     list
         List of property with pre-require bit
     """
-    rpm_properties = {'obsoletes': {'name': rpm.RPMTAG_OBSOLETENAME,
-                                    'flags': rpm.RPMTAG_OBSOLETEFLAGS,
-                                    'evr': rpm.RPMTAG_OBSOLETEVERSION},
-                      'provides': {'name': rpm.RPMTAG_PROVIDENAME,
-                                   'flags': rpm.RPMTAG_PROVIDEFLAGS,
-                                   'evr': rpm.RPMTAG_PROVIDEVERSION},
-                      'conflicts': {'name': rpm.RPMTAG_CONFLICTNAME,
-                                    'flags': rpm.RPMTAG_CONFLICTFLAGS,
-                                    'evr': rpm.RPMTAG_CONFLICTVERSION},
-                      'requires': {'name': rpm.RPMTAG_REQUIRENAME,
-                                   'flags': rpm.RPMTAG_REQUIREFLAGS,
-                                   'evr': rpm.RPMTAG_REQUIREVERSION}}
+    rpm_properties = {
+        "obsoletes": {
+            "name": rpm.RPMTAG_OBSOLETENAME,
+            "flags": rpm.RPMTAG_OBSOLETEFLAGS,
+            "evr": rpm.RPMTAG_OBSOLETEVERSION,
+        },
+        "provides": {
+            "name": rpm.RPMTAG_PROVIDENAME,
+            "flags": rpm.RPMTAG_PROVIDEFLAGS,
+            "evr": rpm.RPMTAG_PROVIDEVERSION,
+        },
+        "conflicts": {
+            "name": rpm.RPMTAG_CONFLICTNAME,
+            "flags": rpm.RPMTAG_CONFLICTFLAGS,
+            "evr": rpm.RPMTAG_CONFLICTVERSION,
+        },
+        "requires": {
+            "name": rpm.RPMTAG_REQUIRENAME,
+            "flags": rpm.RPMTAG_REQUIREFLAGS,
+            "evr": rpm.RPMTAG_REQUIREVERSION,
+        },
+    }
     if rpm_property not in rpm_properties:
-        rpm_property = 'requires'
+        rpm_property = "requires"
     prop = rpm_properties[rpm_property]
-    name = hdr[prop['name']]
-    lst = hdr[prop['flags']]
+    name = hdr[prop["name"]]
+    lst = hdr[prop["flags"]]
     flag = list(map(flag_to_string, lst))
     pre = list(map(is_pre_req, lst))
-    lstvr = hdr[prop['evr']]
+    lstvr = hdr[prop["evr"]]
     vers = list(map(string_to_version, lstvr))
     if name is not None:
         lst = list(zip(name, flag, vers, pre))
@@ -276,30 +300,38 @@ def init_metadata(rpm_file):
         Returns initial metadata of package and header of RPM
 
     """
-    res = ''
-    ts = rpm.TransactionSet('', rpm._RPMVSF_NOSIGNATURES)
-    with open(rpm_file, 'rb') as fd:
+    res = ""
+    ts = rpm.TransactionSet("", rpm._RPMVSF_NOSIGNATURES)
+    with open(rpm_file, "rb") as fd:
         hdr = ts.hdrFromFdno(fd)
-        chglogs = zip(hdr[rpm.RPMTAG_CHANGELOGNAME],
-                      hdr[rpm.RPMTAG_CHANGELOGTIME],
-                      hdr[rpm.RPMTAG_CHANGELOGTEXT])
+        chglogs = zip(
+            hdr[rpm.RPMTAG_CHANGELOGNAME],
+            hdr[rpm.RPMTAG_CHANGELOGTIME],
+            hdr[rpm.RPMTAG_CHANGELOGTEXT],
+        )
         for nm, tm, tx in reversed(list(chglogs)):
-            c = lxml.etree.Element('changelog', author=to_unicode(nm),
-                                   date=to_unicode(tm))
+            c = lxml.etree.Element(
+                "changelog", author=to_unicode(nm), date=to_unicode(tm)
+            )
             c.text = to_unicode(tx)
             res += to_unicode(lxml.etree.tostring(c, pretty_print=True))
         meta = {
-            'changelog_xml': res,
-            'files': [], 'obsoletes': [], 'provides': [],
-            'conflicts': [], 'requires': [],
-            'vendor': to_unicode(hdr[rpm.RPMTAG_VENDOR]),
-            'buildhost': to_unicode(hdr[rpm.RPMTAG_BUILDHOST]),
-            'filetime': int(hdr[rpm.RPMTAG_BUILDTIME]),
+            "changelog_xml": res,
+            "files": [],
+            "obsoletes": [],
+            "provides": [],
+            "conflicts": [],
+            "requires": [],
+            "vendor": to_unicode(hdr[rpm.RPMTAG_VENDOR]),
+            "buildhost": to_unicode(hdr[rpm.RPMTAG_BUILDHOST]),
+            "filetime": int(hdr[rpm.RPMTAG_BUILDTIME]),
         }
         # If package size too large (more than 32bit integer)
         # This fields will became None
-        for key, rpm_key in (('archivesize', rpm.RPMTAG_ARCHIVESIZE),
-                             ('packagesize', rpm.RPMTAG_SIZE)):
+        for key, rpm_key in (
+            ("archivesize", rpm.RPMTAG_ARCHIVESIZE),
+            ("packagesize", rpm.RPMTAG_SIZE),
+        ):
             value = hdr[rpm_key]
             if value is not None:
                 value = int(value)
@@ -327,18 +359,18 @@ def get_files_from_package(hdr):
     res_files = {}
     for (fn, mode, flag) in filetuple:
         # garbage checks
-        if mode is None or mode == '':
-            if 'file' not in res_files:
-                res_files['file'] = []
-            res_files['file'].append(to_unicode(fn))
+        if mode is None or mode == "":
+            if "file" not in res_files:
+                res_files["file"] = []
+            res_files["file"].append(to_unicode(fn))
             continue
         if mode not in mode_cache:
             mode_cache[mode] = stat.S_ISDIR(mode)
-        fkey = 'file'
+        fkey = "file"
         if mode_cache[mode]:
-            fkey = 'dir'
+            fkey = "dir"
         elif flag is not None and (flag & 64):
-            fkey = 'ghost'
+            fkey = "ghost"
         res_files.setdefault(fkey, []).append(to_unicode(fn))
     return res_files
 
@@ -352,25 +384,25 @@ def split_filename(filename):
         1:bar-9-123a.ia64.rpm returns bar, 9, 123a, 1, ia64
     """
 
-    if filename[-4:] == '.rpm':
+    if filename[-4:] == ".rpm":
         filename = filename[:-4]
 
-    arch_index = filename.rfind('.')
-    arch = filename[arch_index+1:]
+    arch_index = filename.rfind(".")
+    arch = filename[arch_index + 1 :]
 
-    rel_index = filename[:arch_index].rfind('-')
-    rel = filename[rel_index+1:arch_index]
+    rel_index = filename[:arch_index].rfind("-")
+    rel = filename[rel_index + 1 : arch_index]
 
-    ver_index = filename[:rel_index].rfind('-')
-    ver = filename[ver_index+1:rel_index]
+    ver_index = filename[:rel_index].rfind("-")
+    ver = filename[ver_index + 1 : rel_index]
 
-    epoch_index = filename.find(':')
+    epoch_index = filename.find(":")
     if epoch_index == -1:
-        epoch = ''
+        epoch = ""
     else:
         epoch = filename[:epoch_index]
 
-    name = filename[epoch_index + 1:ver_index]
+    name = filename[epoch_index + 1 : ver_index]
     return name, ver, rel, epoch, arch
 
 
@@ -392,12 +424,12 @@ def is_rpm_file(f_name, check_magic=False):
     bool
         True if file is RPM package, False otherwise.
     """
-    ext_rslt = re.search(r'.*?\.rpm$', f_name, re.IGNORECASE)
+    ext_rslt = re.search(r".*?\.rpm$", f_name, re.IGNORECASE)
     if check_magic:
-        f = open(f_name, 'rb')
+        f = open(f_name, "rb")
         bs = f.read(4)
         f.close()
-        return bs == b'\xed\xab\xee\xdb' and ext_rslt
+        return bs == b"\xed\xab\xee\xdb" and ext_rslt
     return bool(ext_rslt)
 
 
@@ -415,7 +447,7 @@ def evr_to_string(evr):
     String
         str for given list
     """
-    ret = ''
+    ret = ""
     if not isinstance(evr, (list, tuple)):
         evr = [evr]
     for i in evr:
@@ -466,7 +498,7 @@ def evrtofloat(rpm_data):
                 for ch in elem:
                     evr.extend(char_to(ch))
         else:
-            raise NameError('ThisStrange: ' + elem)
+            raise NameError("ThisStrange: " + elem)
         evr.extend(char_to(chr(0)))
     return "".join(["%02x" % n for n in evr])
 
@@ -487,14 +519,14 @@ def split_segments(s):
     """
     if not isinstance(s, str):
         return []
-    buff = ''
+    buff = ""
     segs = []
     ALPHA = 0
     DIGIT = 1
     typesym = ALPHA
     for c in s:
         if c.isdigit():
-            if typesym == DIGIT or buff == '':
+            if typesym == DIGIT or buff == "":
                 buff += c
             else:
                 if typesym == ALPHA:
@@ -502,24 +534,24 @@ def split_segments(s):
                     buff = c
             typesym = DIGIT
         elif c.isalpha():
-            if typesym == ALPHA or buff == '':
+            if typesym == ALPHA or buff == "":
                 buff += c
             else:
                 segs += [int(buff)]
                 buff = c
             typesym = ALPHA
         else:
-            if buff != '' and typesym == DIGIT:
+            if buff != "" and typesym == DIGIT:
                 segs += [int(buff)]
             else:
-                if buff != '' and typesym == ALPHA:
+                if buff != "" and typesym == ALPHA:
                     segs += [buff]
-            buff = ''
+            buff = ""
             typesym = None
-    if buff != '' and typesym == DIGIT:
+    if buff != "" and typesym == DIGIT:
         segs += [int(buff)]
     else:
-        if buff != '' and typesym == ALPHA:
+        if buff != "" and typesym == ALPHA:
             segs += [buff]
     return segs
 

@@ -17,7 +17,7 @@ from sign_node.utils.file_utils import hash_file
 from sign_node.models import Artifact
 
 
-__all__ = ['PulpBaseUploader', 'PulpRpmUploader']
+__all__ = ["PulpBaseUploader", "PulpRpmUploader"]
 
 
 class TaskFailedError(Exception):
@@ -29,8 +29,7 @@ class PulpBaseUploader(BaseUploader):
     Handles uploads to Pulp server.
     """
 
-    def __init__(self, host: str, username: str, password: str,
-                 chunk_size: int):
+    def __init__(self, host: str, username: str, password: str, chunk_size: int):
         """
         Initiate uploader.
 
@@ -54,8 +53,7 @@ class PulpBaseUploader(BaseUploader):
         self._logger = logging.getLogger(__file__)
 
     @staticmethod
-    def _prepare_api_client(host: str, username: str, password: str) \
-            -> ApiClient:
+    def _prepare_api_client(host: str, username: str, password: str) -> ApiClient:
         """
 
         Parameters
@@ -70,7 +68,8 @@ class PulpBaseUploader(BaseUploader):
 
         """
         api_configuration = Configuration(
-            host=host, username=username, password=password)
+            host=host, username=username, password=password
+        )
         return ApiClient(configuration=api_configuration)
 
     def _wait_for_task_completion(self, task_href: str) -> dict:
@@ -87,12 +86,11 @@ class PulpBaseUploader(BaseUploader):
 
         """
         result = self._tasks_client.read(task_href)
-        while result.state not in ('failed', 'completed'):
+        while result.state not in ("failed", "completed"):
             time.sleep(5)
             result = self._tasks_client.read(task_href)
-        if result.state == 'failed':
-            raise TaskFailedError(f'task {task_href} has failed, '
-                                  f'details: {result}')
+        if result.state == "failed":
+            raise TaskFailedError(f"task {task_href} has failed, " f"details: {result}")
         return result
 
     def _create_upload(self, file_path: str) -> (str, int):
@@ -110,7 +108,7 @@ class PulpBaseUploader(BaseUploader):
 
         """
         file_size = os.path.getsize(file_path)
-        response = self._uploads_client.create({'size': file_size})
+        response = self._uploads_client.create({"size": file_size})
         return response.pulp_href, file_size
 
     def _commit_upload(self, file_path: str, reference: str) -> str:
@@ -131,21 +129,19 @@ class PulpBaseUploader(BaseUploader):
             Reference to the created resource.
 
         """
-        file_sha256 = hash_file(file_path, hash_type='sha256')
-        response = self._uploads_client.commit(
-            reference, {'sha256': file_sha256})
+        file_sha256 = hash_file(file_path, hash_type="sha256")
+        response = self._uploads_client.commit(reference, {"sha256": file_sha256})
         task_result = self._wait_for_task_completion(response.task)
         return task_result.created_resources[0]
 
     def _put_large_file(self, file_path: str, reference: str):
-        temp_dir = tempfile.mkdtemp(prefix='pulp_uploader_')
+        temp_dir = tempfile.mkdtemp(prefix="pulp_uploader_")
         try:
             lower_bytes_limit = 0
             total_size = os.path.getsize(file_path)
-            self._file_splitter.split(
-                file_path, self._chunk_size, output_dir=temp_dir)
+            self._file_splitter.split(file_path, self._chunk_size, output_dir=temp_dir)
             for file_ in sorted(os.listdir(temp_dir)):
-                if file_ == 'fs_manifest.csv':
+                if file_ == "fs_manifest.csv":
                     continue
                 split_file_path = os.path.join(temp_dir, file_)
                 # File part may have size lower than self._chunk_size,
@@ -153,9 +149,10 @@ class PulpBaseUploader(BaseUploader):
                 new_size = os.path.getsize(split_file_path)
                 upper_bytes_limit = lower_bytes_limit + new_size - 1
                 self._uploads_client.update(
-                    f'bytes {lower_bytes_limit}-{upper_bytes_limit}/'
-                    f'{total_size}',
-                    reference, split_file_path)
+                    f"bytes {lower_bytes_limit}-{upper_bytes_limit}/" f"{total_size}",
+                    reference,
+                    split_file_path,
+                )
                 lower_bytes_limit += new_size
         finally:
             if temp_dir and os.path.exists(temp_dir):
@@ -167,9 +164,7 @@ class PulpBaseUploader(BaseUploader):
             self._put_large_file(file_path, reference)
         else:
             self._uploads_client.update(
-                f'bytes 0-{file_size - 1}/{file_size}',
-                reference,
-                file_path
+                f"bytes 0-{file_size - 1}/{file_size}", reference, file_path
             )
         artifact_href = self._commit_upload(file_path, reference)
         return artifact_href
@@ -199,13 +194,12 @@ class PulpBaseUploader(BaseUploader):
             try:
                 artifacts.append(self.upload_single_file(artifact))
             except Exception as e:
-                self._logger.error(f'Cannot upload {artifact}, error: {e}',
-                                   exc_info=e)
+                self._logger.error(f"Cannot upload {artifact}, error: {e}", exc_info=e)
                 errored_uploads.append(artifact)
         # TODO: Decide what to do with successfully uploaded artifacts
         #  in case of errors during upload.
         if errored_uploads:
-            raise UploadError(f'Unable to upload files: {errored_uploads}')
+            raise UploadError(f"Unable to upload files: {errored_uploads}")
         return artifacts
 
     def upload_single_file(self, filename: str) -> Artifact:
@@ -222,19 +216,18 @@ class PulpBaseUploader(BaseUploader):
             List of the references to the artifacts inside Pulp
 
         """
-        file_sha256 = hash_file(filename, hash_type='sha256')
+        file_sha256 = hash_file(filename, hash_type="sha256")
         reference = self.check_if_artifact_exists(file_sha256)
         if not reference:
             reference = self._send_file(filename)
         return Artifact(
             name=os.path.basename(filename),
             href=reference,
-            type='rpm' if filename.endswith('.rpm') else 'build_log'
+            type="rpm" if filename.endswith(".rpm") else "build_log",
         )
 
 
 class PulpRpmUploader(PulpBaseUploader):
-
     def get_artifacts_list(self, artifacts_dir: str) -> List[str]:
         """
 
@@ -254,10 +247,10 @@ class PulpRpmUploader(PulpBaseUploader):
         """
         artifacts = []
         for file_ in super().get_artifacts_list(artifacts_dir):
-            if file_.endswith('.rpm'):
+            if file_.endswith(".rpm"):
                 artifacts.append(file_)
-            elif file_.endswith('.log'):
+            elif file_.endswith(".log"):
                 artifacts.append(file_)
-            elif file_.endswith('.cfg'):
+            elif file_.endswith(".cfg"):
                 artifacts.append(file_)
         return artifacts

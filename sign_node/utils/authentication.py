@@ -7,8 +7,12 @@
 import flask
 import flask_jwt_extended
 
-__all__ = ['get_JWT_token_JTI', 'generate_JWT_token',
-           'generate_permanent_JWT_token', 'exclude_group_names']
+__all__ = [
+    "get_JWT_token_JTI",
+    "generate_JWT_token",
+    "generate_permanent_JWT_token",
+    "exclude_group_names",
+]
 
 
 def init_auth_application(secret_key=None, app=None):
@@ -29,11 +33,11 @@ def init_auth_application(secret_key=None, app=None):
         Initialized Flask application.
     """
     if (not secret_key and not app) or (secret_key and app):
-        raise ValueError('either secret_key or app is required')
+        raise ValueError("either secret_key or app is required")
     if app:
         return app
     app = flask.Flask(__name__)
-    app.config['JWT_SECRET_KEY'] = secret_key
+    app.config["JWT_SECRET_KEY"] = secret_key
     flask_jwt_extended.JWTManager(app)
     return app
 
@@ -89,8 +93,9 @@ def generate_JWT_token(identity, expires_delta, secret_key=None, app=None):
     """
     app = init_auth_application(secret_key, app)
     with app.app_context():
-        return flask_jwt_extended.\
-            create_access_token(identity, expires_delta=expires_delta)
+        return flask_jwt_extended.create_access_token(
+            identity, expires_delta=expires_delta
+        )
 
 
 def generate_permanent_JWT_token(identity, secret_key=None, app=None):
@@ -138,7 +143,12 @@ def exclude_group_names(groups):
     """
     attrs_groups = []
     for attr in groups:
-        if attr not in ['ipausers', 'departments', 'buildsys-rollout',
-                        'buildsys_admin', 'buildsys_users']:
+        if attr not in [
+            "ipausers",
+            "departments",
+            "buildsys-rollout",
+            "buildsys_admin",
+            "buildsys_users",
+        ]:
             attrs_groups.append(attr)
     return attrs_groups

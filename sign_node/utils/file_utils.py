@@ -28,10 +28,22 @@ import pycurl
 from .hashing import get_hasher
 
 
-__all__ = ['chown_recursive', 'clean_dir', 'rm_sudo', 'hash_file',
-           'filter_files', 'normalize_path', 'safe_mkdir', 'safe_symlink',
-           'find_files', 'urljoin_path', 'touch_file', 'download_file',
-           'copy_dir_recursive', 'is_gzip_file']
+__all__ = [
+    "chown_recursive",
+    "clean_dir",
+    "rm_sudo",
+    "hash_file",
+    "filter_files",
+    "normalize_path",
+    "safe_mkdir",
+    "safe_symlink",
+    "find_files",
+    "urljoin_path",
+    "touch_file",
+    "download_file",
+    "copy_dir_recursive",
+    "is_gzip_file",
+]
 
 
 def chown_recursive(path, owner=None, group=None):
@@ -50,8 +62,8 @@ def chown_recursive(path, owner=None, group=None):
     if not owner:
         owner = getpass.getuser()
     if not group:
-        group = plumbum.local['id']('-g', '-n').strip()
-    plumbum.local['sudo']['chown', '-R', f'{owner}:{group}', path]()
+        group = plumbum.local["id"]("-g", "-n").strip()
+    plumbum.local["sudo"]["chown", "-R", f"{owner}:{group}", path]()
 
 
 def clean_dir(path):
@@ -87,12 +99,15 @@ def rm_sudo(path):
     --------
     Do not use that function unless you are absolutely know what are you doing.
     """
-    plumbum.local['sudo']['rm', '-fr', path]()
+    plumbum.local["sudo"]["rm", "-fr", path]()
 
 
 def filter_files(directory_path, filter_fn):
-    return [os.path.join(directory_path, f) for f in os.listdir(directory_path)
-            if filter_fn(f)]
+    return [
+        os.path.join(directory_path, f)
+        for f in os.listdir(directory_path)
+        if filter_fn(f)
+    ]
 
 
 def hash_file(file_path, hasher=None, hash_type=None, buff_size=1048576):
@@ -122,9 +137,10 @@ def hash_file(file_path, hasher=None, hash_type=None, buff_size=1048576):
         buff = _fd.read(buff_size)
         while len(buff):
             if not isinstance(buff, bytes):
-                buff = buff.encode('utf')
+                buff = buff.encode("utf")
             hasher.update(buff)
             buff = _fd.read(buff_size)
+
     if isinstance(file_path, str):
         with open(file_path, "rb") as fd:
             feed_hasher(fd)
@@ -144,7 +160,7 @@ def touch_file(file_path):
     file_path : str
         File path.
     """
-    with open(file_path, 'a'):
+    with open(file_path, "a"):
         os.utime(file_path, None)
 
 
@@ -190,7 +206,7 @@ def safe_mkdir(path, mode=0o750):
         os.makedirs(path, mode)
         return True
     elif not os.path.isdir(path):
-        raise IOError(errno.ENOTDIR, '{0} is not a directory'.format(path))
+        raise IOError(errno.ENOTDIR, "{0} is not a directory".format(path))
     return False
 
 
@@ -247,17 +263,33 @@ def urljoin_path(base_url, *args):
         A full URL combined from a base URL and relative URL(s).
     """
     parsed_base = urllib.parse.urlsplit(base_url)
-    paths = itertools.chain((parsed_base.path,),
-                            [urllib.parse.urlsplit(a).path for a in args])
-    path = '/'.join(p.strip('/') for p in paths if p)
-    return urllib.parse.urlunsplit((parsed_base.scheme, parsed_base.netloc,
-                                    path, parsed_base.query,
-                                    parsed_base.fragment))
+    paths = itertools.chain(
+        (parsed_base.path,), [urllib.parse.urlsplit(a).path for a in args]
+    )
+    path = "/".join(p.strip("/") for p in paths if p)
+    return urllib.parse.urlunsplit(
+        (
+            parsed_base.scheme,
+            parsed_base.netloc,
+            path,
+            parsed_base.query,
+            parsed_base.fragment,
+        )
+    )
 
 
-def download_file(url, dst, ssl_cert=None, ssl_key=None, ca_info=None,
-                  timeout=300, http_header=None, login=None, password=None,
-                  no_ssl_verify=False):
+def download_file(
+    url,
+    dst,
+    ssl_cert=None,
+    ssl_key=None,
+    ca_info=None,
+    timeout=300,
+    http_header=None,
+    login=None,
+    password=None,
+    no_ssl_verify=False,
+):
     """
     Downloads remote or copies local file to the specified destination. If
     destination is a file or file-like object this function will write data
@@ -297,44 +329,51 @@ def download_file(url, dst, ssl_cert=None, ssl_key=None, ca_info=None,
     url_scheme = parsed_url.scheme
     file_name = None
     tmp_path = None
-    if url_scheme in ('', 'file'):
+    if url_scheme in ("", "file"):
         file_name = os.path.split(parsed_url.path)[1]
 
     if isinstance(dst, str):
         if os.path.isdir(dst):
             if file_name:
                 # we are "downloading" a local file so we know its name
-                dst_fd = open(os.path.join(dst, file_name), 'wb')
+                dst_fd = open(os.path.join(dst, file_name), "wb")
             else:
                 # create a temporary file for saving data if destination is a
                 # directory because we will know a file name only after download
-                tmp_fd, tmp_path = tempfile.mkstemp(dir=dst, prefix='alt_')
-                dst_fd = open(tmp_fd, 'wb')
+                tmp_fd, tmp_path = tempfile.mkstemp(dir=dst, prefix="alt_")
+                dst_fd = open(tmp_fd, "wb")
         else:
-            dst_fd = open(dst, 'wb')
-    elif hasattr(dst, 'write'):
+            dst_fd = open(dst, "wb")
+    elif hasattr(dst, "write"):
         dst_fd = dst
     else:
-        raise ValueError('invalid destination')
+        raise ValueError("invalid destination")
 
     try:
-        if url_scheme in ('', 'file'):
-            with open(parsed_url.path, 'rb') as src_fd:
+        if url_scheme in ("", "file"):
+            with open(parsed_url.path, "rb") as src_fd:
                 shutil.copyfileobj(src_fd, dst_fd)
-            return file_name if hasattr(dst, 'write') else dst_fd.name
-        elif url_scheme == 'ftp':
+            return file_name if hasattr(dst, "write") else dst_fd.name
+        elif url_scheme == "ftp":
             real_url = ftp_file_download(url, dst_fd)
-        elif url_scheme in ('http', 'https'):
+        elif url_scheme in ("http", "https"):
             real_url = http_file_download(
-                url, dst_fd, timeout, login, password, http_header, ssl_cert,
-                ssl_key, ca_info, no_ssl_verify
+                url,
+                dst_fd,
+                timeout,
+                login,
+                password,
+                http_header,
+                ssl_cert,
+                ssl_key,
+                ca_info,
+                no_ssl_verify,
             )
         else:
-            raise NotImplementedError('unsupported URL scheme "{0}"'.
-                                      format(url_scheme))
+            raise NotImplementedError('unsupported URL scheme "{0}"'.format(url_scheme))
     finally:
         # close the destination file descriptor if it was created internally
-        if not hasattr(dst, 'write'):
+        if not hasattr(dst, "write"):
             dst_fd.close()
 
     file_name = os.path.basename(urllib.parse.urlsplit(real_url)[2]).strip()
@@ -347,9 +386,18 @@ def download_file(url, dst, ssl_cert=None, ssl_key=None, ca_info=None,
     return file_name
 
 
-def http_file_download(url, fd, timeout=300, login=None, password=None,
-                       http_header=None, ssl_cert=None, ssl_key=None,
-                       ca_info=None, no_ssl_verify=None):
+def http_file_download(
+    url,
+    fd,
+    timeout=300,
+    login=None,
+    password=None,
+    http_header=None,
+    ssl_cert=None,
+    ssl_key=None,
+    ca_info=None,
+    no_ssl_verify=None,
+):
     """
     Download remote http(s) file to the specified file-like object.
 
@@ -382,10 +430,8 @@ def http_file_download(url, fd, timeout=300, login=None, password=None,
         Real download url.
     """
     if login and password:
-        auth_hash = base64.b64encode('{0}:{1}'.format(
-            login, password).encode('utf-8'))
-        auth_header = 'Authorization: Basic {0}'.format(
-            auth_hash.decode('utf-8'))
+        auth_hash = base64.b64encode("{0}:{1}".format(login, password).encode("utf-8"))
+        auth_header = "Authorization: Basic {0}".format(auth_hash.decode("utf-8"))
         if not http_header:
             http_header = []
         http_header.append(auth_header)
@@ -418,8 +464,7 @@ def http_file_download(url, fd, timeout=300, login=None, password=None,
     status_code = curl.getinfo(pycurl.RESPONSE_CODE)
     if status_code not in (200, 206, 302):
         curl.close()
-        raise Exception("cannot download: {0} status code".
-                        format(status_code))
+        raise Exception("cannot download: {0} status code".format(status_code))
     real_url = urllib.parse.unquote(curl.getinfo(pycurl.EFFECTIVE_URL))
     curl.close()
     return real_url
@@ -445,8 +490,7 @@ def ftp_file_download(url, fd):
     ftp = ftplib.FTP(url_parsed.netloc)
     ftp.login()
     ftp.cwd(os.path.dirname(url_parsed.path))
-    ftp.retrbinary('RETR {0}'.format(os.path.basename(url_parsed.path)),
-                   fd.write)
+    ftp.retrbinary("RETR {0}".format(os.path.basename(url_parsed.path)), fd.write)
     ftp.quit()
     return url
 
@@ -501,5 +545,5 @@ def is_gzip_file(file_path):
     bool
         True if given file is a gzip archive, False otherwise.
     """
-    with open(file_path, 'rb') as fd:
-        return binascii.hexlify(fd.read(2)) == b'1f8b'
+    with open(file_path, "rb") as fd:
+        return binascii.hexlify(fd.read(2)) == b"1f8b"

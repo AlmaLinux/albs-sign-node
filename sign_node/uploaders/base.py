@@ -3,7 +3,7 @@ import typing
 from abc import abstractmethod
 
 
-__all__ = ['BaseUploader', 'UploadError']
+__all__ = ["BaseUploader", "UploadError"]
 
 
 class UploadError(Exception):
@@ -11,7 +11,6 @@ class UploadError(Exception):
 
 
 class BaseUploader(object):
-
     def get_artifacts_list(self, artifacts_dir: str) -> typing.List[str]:
         """
         Returns the list of the files in artifacts directory

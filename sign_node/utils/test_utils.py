@@ -14,8 +14,12 @@ import sys
 import tempfile
 import unittest
 
-__all__ = ['MOCK_COMMAND_TEMPLATE', 'MockShellCommand',
-           'unload_plumbum_modules', 'change_cwd']
+__all__ = [
+    "MOCK_COMMAND_TEMPLATE",
+    "MockShellCommand",
+    "unload_plumbum_modules",
+    "change_cwd",
+]
 
 
 MOCK_COMMAND_TEMPLATE = """#!{python}
@@ -69,10 +73,10 @@ class MockShellCommand(object):
         self.__output_file = None
 
     def __enter__(self):
-        self.__command_dir = tempfile.mkdtemp(prefix='castor_msc_',
-                                              dir=self.__tmp_dir)
-        fd, self.__output_file = tempfile.mkstemp(prefix='castor_msc_',
-                                                  dir=self.__tmp_dir)
+        self.__command_dir = tempfile.mkdtemp(prefix="castor_msc_", dir=self.__tmp_dir)
+        fd, self.__output_file = tempfile.mkstemp(
+            prefix="castor_msc_", dir=self.__tmp_dir
+        )
         os.close(fd)
         self.__create_command_file()
         self.modify_env_path(self.__command_dir)
@@ -83,29 +87,30 @@ class MockShellCommand(object):
         command = MOCK_COMMAND_TEMPLATE.format(
             python=sys.executable,
             output_file=self.__output_file,
-            user_code=self.__user_code or '')
-        with open(command_path, 'w') as fd:
+            user_code=self.__user_code or "",
+        )
+        with open(command_path, "w") as fd:
             fd.write(command)
         os.chmod(command_path, 0o755)
 
     def get_calls(self):
         if not self.__output_file or not os.path.isfile(self.__output_file):
             return []
-        with open(self.__output_file, 'r') as fd:
-            return [json.loads(chunk)
-                    for chunk in fd.read().split('\x1e')[:-1]]
+        with open(self.__output_file, "r") as fd:
+            return [json.loads(chunk) for chunk in fd.read().split("\x1e")[:-1]]
 
     @staticmethod
     def modify_env_path(command_dir):
-        os.environ['PATH'] = '{0}{1}{2}'.format(command_dir, os.pathsep,
-                                                os.environ['PATH'])
+        os.environ["PATH"] = "{0}{1}{2}".format(
+            command_dir, os.pathsep, os.environ["PATH"]
+        )
 
     @staticmethod
     def revert_env_path(command_dir):
-        paths = os.environ['PATH'].split(os.pathsep)
+        paths = os.environ["PATH"].split(os.pathsep)
         if command_dir in paths:
             paths.remove(command_dir)
-        os.environ['PATH'] = os.pathsep.join(paths)
+        os.environ["PATH"] = os.pathsep.join(paths)
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         if self.__command_dir:
@@ -131,8 +136,9 @@ def unload_plumbum_modules(test_module):
         Name of a module to unload alon with plumbum submodules.
     """
     for mod in list(sys.modules.keys()):
-        if (mod == test_module) or \
-                ('plumbum' in mod and mod != 'plumbum.commands.processes'):
+        if (mod == test_module) or (
+            "plumbum" in mod and mod != "plumbum.commands.processes"
+        ):
             del sys.modules[mod]
 
 
