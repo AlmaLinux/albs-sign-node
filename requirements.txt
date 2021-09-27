@@ -35,7 +35,6 @@ drf-spectacular
 dynaconf
 et-xmlfile
 filesplit
-gnupg
 gunicorn
 idna
 inflection
@@ -66,7 +65,7 @@ pyfakefs
 pyparsing
 pyrsistent
 python-dateutil
-python-gnupg
+python-gnupg==0.4.1
 pytz
 PyYAML
 requests
