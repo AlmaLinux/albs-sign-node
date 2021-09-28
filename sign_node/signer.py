@@ -61,7 +61,7 @@ class Signer(object):
                     msg = f"Signing failed: {e}.\nTraceback: {traceback.format_exc()}"
                     logging.info(msg)
                     self.__call_master(
-                        "sign_task_completed", task_id=task["id"], msg=msg
+                        "sign_done", task_id=task["id"], msg=msg
                     )
                     continue
         except Exception as e:
@@ -136,7 +136,7 @@ class Signer(object):
         task_id : str
             Sign task identifier.
         """
-        response = self.__call_master("sign_task_completed", task_id=task_id)
+        response = self.__call_master("sign_done", task_id=task_id)
         if not response["success"]:
             raise Exception(
                 "Server side error: {0}".format(response.get("error", "unknown"))
@@ -207,7 +207,7 @@ class Signer(object):
             Task to process or None if master didn't return a task.
         """
         response = self.__call_master(
-            "get_sign_task", pgp_keyids=self.__config.pgp_keyids
+            "get_task", pgp_keyids=self.__config.pgp_keyids
         )
         if not response["success"]:
             raise Exception(
