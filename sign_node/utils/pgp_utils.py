@@ -99,7 +99,7 @@ def verify_pgp_key_password(gpg, keyid, password):
 
 
 class PGPPasswordDB(object):
-    def __init__(self, gpg, keyids):
+    def __init__(self, gpg, keyids, pgp_key_password=None):
         """
         Password DB initialization.
 
@@ -112,6 +112,7 @@ class PGPPasswordDB(object):
         """
         self.__gpg = gpg
         self.__keys = {keyid: {} for keyid in keyids}
+        self.__pgp_key_password = pgp_key_password
 
     def ask_for_passwords(self):
         """
@@ -130,9 +131,11 @@ class PGPPasswordDB(object):
                 raise ConfigurationError(
                     "PGP key {0} is not found in the " "gnupg2 database".format(keyid)
                 )
-            password = getpass.getpass(
-                "\nPlease enter the {0} PGP key " "password: ".format(keyid)
-            )
+            password = self.__pgp_key_password
+            if not password:
+                password = getpass.getpass(
+                    "\nPlease enter the {0} PGP key " "password: ".format(keyid)
+                )
             if not verify_pgp_key_password(self.__gpg, keyid, password):
                 raise ConfigurationError(
                     "PGP key {0} password is not valid".format(keyid)

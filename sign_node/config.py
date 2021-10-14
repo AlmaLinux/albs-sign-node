@@ -84,6 +84,7 @@ class SignNodeConfig(BaseConfig):
             "pulp_password": {"type": "string", "nullable": False},
             "pulp_chunk_size": {"type": "integer", "nullable": False},
             "jwt_token": {"type": "string", "nullable": True},
+            "pgp_key_password": {"type": "string", "nullable": True},
         }
         super(SignNodeConfig, self).__init__(
             default_config, config_file, schema, **cmd_args
