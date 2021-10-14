@@ -21,9 +21,9 @@ from sign_node.utils.log import configure_logger
 from sign_node.utils.pgp_utils import init_gpg, PGPPasswordDB
 
 
-def main(sys_args):
+def main():
     args_parser = init_args_parser()
-    args = args_parser.parse_args(sys_args)
+    args = args_parser.parse_args()
     configure_logger(args.verbose)
     try:
         config_file = locate_config_file('sign_node', args.config)
@@ -50,4 +50,4 @@ def main(sys_args):
 
 
 if __name__ == '__main__':
-    sys.exit(main(sys.argv[1:]))
+    sys.exit(main())
