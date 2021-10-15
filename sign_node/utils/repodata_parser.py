@@ -176,8 +176,7 @@ class RepodataParser(object):
                 return True
 
             self.__logger.debug(
-                "processing {0} repository using xml "
-                "repodata".format(self.__repo_url)
+                "processing %s repository using xml repodata", self.__repo_url
             )
             for record in repomd.records:
 
@@ -236,7 +235,7 @@ class RepodataParser(object):
                    checksum_type AS checksum_type FROM packages"""
 
         self.__logger.debug(
-            "processing {0} repository using SQLite " "repodata".format(self.__repo_url)
+            "processing %s repository using SQLite repodata", self.__repo_url
         )
         with closing(sqlite3.connect(sql_files["primary_db"])) as con:
             with closing(con.cursor()) as cur:

@@ -28,10 +28,10 @@ def init_working_dir(working_dir):
     #       used by the sign node and we have something very similar in the
     #       build node's code.
     if not safe_mkdir(working_dir):
-        logging.debug("cleaning up the {0} working directory".format(working_dir))
+        logging.debug("cleaning up the %s working directory", working_dir)
         clean_dir(working_dir)
     else:
-        logging.debug("working directory {0} was created".format(working_dir))
+        logging.debug("working directory %s was created", working_dir)
 
 
 def init_args_parser():

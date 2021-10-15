@@ -194,7 +194,7 @@ class PulpBaseUploader(BaseUploader):
             try:
                 artifacts.append(self.upload_single_file(artifact))
             except Exception as e:
-                self._logger.error(f"Cannot upload {artifact}, error: {e}", exc_info=e)
+                self._logger.error("Cannot upload %s, error: %s", artifact, e, exc_info=e)
                 errored_uploads.append(artifact)
         # TODO: Decide what to do with successfully uploaded artifacts
         #  in case of errors during upload.

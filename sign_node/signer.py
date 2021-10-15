@@ -52,20 +52,20 @@ class Signer(object):
                     time.sleep(30)
                     continue
                 logging.info(
-                    "Signing the following task:\n{0}".format(pprint.pformat(task))
+                    "Signing the following task:\n%s", pprint.pformat(task)
                 )
                 try:
                     self._sign_build(task)
-                    logging.info("the {0} task is signed".format(task["id"]))
+                    logging.info("the %s task is signed", task["id"])
                 except Exception as e:
-                    msg = f"Signing failed: {e}.\nTraceback: {traceback.format_exc()}"
-                    logging.info(msg)
+                    msg = "Signing failed: %s.\nTraceback: %s"
+                    logging.info(msg, e, traceback.format_exc())
                     self.__call_master(
                         "sign_done", task_id=task["id"], msg=msg
                     )
                     continue
         except Exception as e:
-            logging.debug(f"Couldn't receive task from web_server: {e}")
+            logging.debug("Couldn't receive task from web_server: %s", e)
 
     def _sign_build(self, task):
         """
@@ -145,7 +145,7 @@ class Signer(object):
     def _upload_artifact(self, task_id, platform, package_id, file_name, file_path):
         artifacts_dir = Path(file_path) / Path(file_name)
         logging.info(
-            "Uploading {0} signed package".format(os.path.basename(artifacts_dir))
+            "Uploading %s signed package", os.path.basename(artifacts_dir)
         )
         artifacts = self._pulp_uploader.upload(artifacts_dir)
         return artifacts
@@ -182,7 +182,7 @@ class Signer(object):
         download_url = package["download_url"]
         last_exc = None
         for i in range(1, try_count + 1):
-            logging.debug("Downloading {0} {1}/{2}".format(download_url, i, try_count))
+            logging.debug("Downloading %s %d/%d", download_url, i, try_count)
             try:
                 download_file(download_url, package_path, **self.__download_credentials)
                 checksum = hash_file(package_path, get_hasher("sha256"))
@@ -192,8 +192,7 @@ class Signer(object):
             except Exception as e:
                 last_exc = e
                 logging.error(
-                    "Cannot download {0}: {1}.\nTraceback:\n"
-                    "{2}".format(download_url, str(e), traceback.format_exc())
+                    "Cannot download %s: %s.\nTraceback:\n%s", download_url, str(e), traceback.format_exc()
                 )
         raise last_exc
 

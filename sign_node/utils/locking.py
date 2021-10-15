@@ -45,16 +45,16 @@ def generic_lock(db, db_name, key, value):
             while not locked:
                 if i >= 60:
                     logging.error(
-                        "cannot acquire {0} lock after {1} retries".format(key, i)
+                        "cannot acquire %s lock after %d retries", key, i
                     )
                     raise Exception("cannot acquire {0} lock".format(key))
                 i += 1
-                logging.debug("acquiring {0} lock, try {1}".format(key, i))
+                logging.debug("acquiring %s lock, try %d", key, i)
                 time.sleep(1)
                 locked = txn.put(key, value, overwrite=False)
-            logging.debug("lock {0} acquired after {1} tries".format(key, i))
+            logging.debug("lock %s acquired after %d tries", key, i)
             yield txn
         finally:
             if locked:
-                logging.debug("releasing {0} lock".format(key))
+                logging.debug("releasing %s lock", key)
                 txn.delete(key)

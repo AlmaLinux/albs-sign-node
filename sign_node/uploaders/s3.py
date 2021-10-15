@@ -47,7 +47,7 @@ class S3BaseUploader(BaseUploader):
         file_base_name = os.path.basename(file_path)
         object_name = os.path.join(s3_upload_dir, file_base_name)
         try:
-            self._logger.info(f"Uploading artifact {file_path} to S3")
+            self._logger.info("Uploading artifact %s to S3", file_path)
             self._s3_client.upload_file(file_path, self._s3_bucket, object_name)
             reference = self._s3_client.generate_presigned_url(
                 "get_object",
@@ -56,7 +56,7 @@ class S3BaseUploader(BaseUploader):
             )
             return Artifact(name=file_base_name, href=reference, type="build_log")
         except (S3UploadFailedError, ValueError) as e:
-            self._logger.error(f"Cannot upload artifact {file_path}" f" to S3: {e}")
+            self._logger.error("Cannot upload artifact %s to S3: %s", file_path, e, exc_info=e)
 
     def upload(self, artifacts_dir: str, **kwargs) -> typing.List[str]:
         # To avoid warning about signature we assume that `s3_upload_dir`

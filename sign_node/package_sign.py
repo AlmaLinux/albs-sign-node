@@ -58,12 +58,10 @@ def _list_ar_contents(ar_path):
     file_names, err = proc.communicate()
     if proc.returncode != 0:
         msg = (
-            'Cannot list "{0}" package contents (return code {1}):\n{2}.'
-            "\nTraceback: {3}".format(
-                ar_path, proc.returncode, err, traceback.format_exc()
-            )
+            'Cannot list "%s" package contents (return code %d):\n%s.'
+            "\nTraceback: %s"
         )
-        logging.error(msg)
+        logging.error(msg, ar_path, proc.returncode, err, traceback.format_exc())
         raise PackageSignError(msg)
     return file_names.split()
 
@@ -94,12 +92,10 @@ def _unpack_ar_file(ar_path, file_name, stdout):
     # NOTE: ar returns 0 exit code if a file is missing in an archive
     if re.search(r"no entry.*?in archive", str(err)) or proc.returncode != 0:
         msg = (
-            'Cannot extract "{0}" file from the "{1}" package '
-            "(return code {2}):\n{3}.\nTraceback: {4}".format(
-                file_name, ar_path, proc.returncode, err, traceback.format_exc()
-            )
+            'Cannot extract "%s" file from the "%s" package '
+            "(return code %d):\n%s.\nTraceback: %s"
         )
-        logging.error(msg)
+        logging.error(msg, file_name, ar_path, proc.returncode, err, traceback.format_exc())
         raise PackageSignError(msg)
 
 
@@ -126,12 +122,10 @@ def _append_to_ar_archive(ar_path, file_path):
     out, _ = proc.communicate()
     if proc.returncode != 0:
         msg = (
-            "Сannot add gpgorigin to the {0} ({1} exit code): {2}.\n"
-            "Traceback: {3}".format(
-                ar_path, proc.returncode, out, traceback.format_exc()
-            )
+            "Сannot add gpgorigin to the %s (%d exit code): %s.\n"
+            "Traceback: %s"
         )
-        logging.error(msg)
+        logging.error(msg, ar_path, proc.returncode, out, traceback.format_exc())
         raise PackageSignError(msg)
 
 
@@ -188,8 +182,8 @@ def sign_deb_package(gpg, path, keyid, password):
     except PackageSignError as e:
         raise e
     except Exception as e:
-        msg = 'Cannot sign "{0}" package: {1}'.format(path, str(e))
-        logging.error("{0}. Traceback:\n{1}".format(msg, traceback.format_exc()))
+        msg = 'Cannot sign "%s" package: %s. Traceback:\n%s'
+        logging.error(msg, path, str(e), traceback.format_exc())
         raise PackageSignError(msg)
     finally:
         shutil.rmtree(tmp_dir)
@@ -256,10 +250,9 @@ def sign_rpm_package(path, keyid, password):
     )
     if status != 0:
         logging.error(
-            "The RPM signing command is failed with {0} exit code."
-            "\nCommand: {1}\nOutput:\n{2}.\nTraceback: {3}".format(
-                status, cmd, out, traceback.format_exc()
-            )
+            "The RPM signing command is failed with %s exit code."
+            "\nCommand: %s\nOutput:\n%s.\nTraceback: %s",
+            status, cmd, out, traceback.format_exc()
         )
         raise PackageSignError(
             "RPM sign failed with {0} exit code.\n"
