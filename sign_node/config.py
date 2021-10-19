@@ -36,7 +36,7 @@ class SignNodeConfig(BaseConfig):
         """
         default_config = {
             "development_mode": False,
-            "pgp_keyids": [],
+            "pgp_keys": {},
             "private_key_path": "~/.config/sign_node/"
             "{0}.key_secret".format(platform.node()),
             "public_key_path": "~/.config/sign_node/" "{0}.key".format(platform.node()),
@@ -51,11 +51,10 @@ class SignNodeConfig(BaseConfig):
         }
         schema = {
             "development_mode": {"type": "boolean", "default": False},
-            "pgp_keyids": {
-                "type": "list",
+            "pgp_keys": {
+                "type": "dict",
                 "required": True,
                 "empty": False,
-                "schema": {"type": "string"},
             },
             "private_key_path": {
                 "type": "string",
@@ -84,7 +83,6 @@ class SignNodeConfig(BaseConfig):
             "pulp_password": {"type": "string", "nullable": False},
             "pulp_chunk_size": {"type": "integer", "nullable": False},
             "jwt_token": {"type": "string", "nullable": True},
-            "pgp_key_password": {"type": "string", "nullable": True},
         }
         super(SignNodeConfig, self).__init__(
             default_config, config_file, schema, **cmd_args

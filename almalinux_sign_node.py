@@ -33,7 +33,7 @@ def main():
         return errno.EINVAL
 
     gpg = init_gpg()
-    password_db = PGPPasswordDB(gpg, config.pgp_keyids[:], config.pgp_key_password)
+    password_db = PGPPasswordDB(gpg, config.pgp_keys.copy())
     try:
         password_db.ask_for_passwords()
     except ConfigurationError as e:

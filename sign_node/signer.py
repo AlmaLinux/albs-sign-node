@@ -205,8 +205,9 @@ class Signer(object):
         dict or None
             Task to process or None if master didn't return a task.
         """
+        pgp_keyids = list(self.__config.pgp_keys)
         response = self.__call_master(
-            "get_task", pgp_keyids=self.__config.pgp_keyids
+            "get_task", pgp_keyids=pgp_keyids
         )
         if not response["success"]:
             raise Exception(
