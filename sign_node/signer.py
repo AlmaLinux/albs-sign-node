@@ -209,13 +209,13 @@ class Signer(object):
         response = self.__call_master(
             "get_task", pgp_keyids=pgp_keyids
         )
-        if not response["success"]:
+        if not response:
             raise Exception(
                 "Server side error: {0}.\nTraceback: {1}".format(
                     response.get("error", "unknown"), traceback.format_exc()
                 )
             )
-        return response.get("sign_task")
+        return response
 
     def __call_master(self, endpoint, **parameters):
         full_url = urllib.parse.urljoin(
