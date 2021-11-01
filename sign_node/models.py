@@ -27,8 +27,6 @@ class TaskCreatedBy(BaseModel):
 class TaskPlatform(BaseModel):
 
     name: str
-    # Python 3.6 don't have literals
-    # type: typing.Literal['rpm', 'deb']
     type: str
     data: typing.Dict[str, typing.Any]
 
