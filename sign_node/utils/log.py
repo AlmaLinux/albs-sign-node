@@ -53,10 +53,10 @@ def create_log_dict(log, status):
 
     Parameters
     ----------
-    log:       str or unicode
-          String for log
-    status:       str or unicode
-          Status
+    log : str or unicode
+        String for log
+    status : str or unicode
+        Status
     Returns
     -------
     dict
