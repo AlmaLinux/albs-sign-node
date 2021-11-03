@@ -5,7 +5,6 @@
 
 import os
 import logging
-import math
 import pprint
 import shutil
 import time
@@ -17,9 +16,10 @@ from pathlib import Path
 
 from sign_node.utils.file_utils import download_file, hash_file, safe_mkdir
 from sign_node.uploaders.pulp import PulpRpmUploader
-from sign_node.package_sign import sign_dsc_package, sign_deb_package, sign_rpm_package
+from sign_node.package_sign import (
+    sign_dsc_package, sign_deb_package, sign_rpm_package
+)
 
-from .errors import ConnectionError
 from .utils.hashing import get_hasher
 
 __all__ = ["Signer"]
@@ -44,28 +44,32 @@ class Signer(object):
             self.__download_credentials["no_ssl_verify"] = True
 
     def sign_loop(self):
-        try:
-            while True:
+        while True:
+            task = None
+            try:
                 task = self._request_task()
-                if not task:
-                    logging.debug("There is no task to sign")
-                    time.sleep(30)
-                    continue
-                logging.info(
-                    "Signing the following task:\n%s", pprint.pformat(task)
+            except Exception:
+                logging.exception('Can\'t recieve new task from web server')
+            if not task:
+                logging.debug("There is no task to sign")
+                time.sleep(30)
+                continue
+            logging.info(
+                "Signing the following task:\n%s", pprint.pformat(task)
+            )
+            try:
+                self._sign_build(task)
+                logging.info("the %s task is signed", task["id"])
+            except Exception as e:
+                msg = (
+                    f'Signing failed: {e}.\n'
+                    f'Traceback: {traceback.format_exc()}'
                 )
-                try:
-                    self._sign_build(task)
-                    logging.info("the %s task is signed", task["id"])
-                except Exception as e:
-                    msg = "Signing failed: %s.\nTraceback: %s"
-                    logging.info(msg, e, traceback.format_exc())
-                    self.__call_master(
-                        "sign_done", task_id=task["id"], msg=msg
-                    )
-                    continue
-        except Exception as e:
-            logging.debug("Couldn't receive task from web_server: %s", e)
+                logging.error(msg)
+                self.__call_master(
+                    "sign_done", task_id=task["id"], msg=msg
+                )
+                continue
 
     def _sign_build(self, task):
         """
