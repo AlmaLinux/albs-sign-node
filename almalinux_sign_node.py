@@ -8,7 +8,6 @@ CloudLinux Build System builds sign node.
 """
 
 import errno
-import signal
 import sys
 
 
@@ -41,9 +40,6 @@ def main():
         return errno.EACCES
 
     init_working_dir(config.working_dir)
-    
-    # signal.signal(signal.SIGINT, signal_handler)
-    # signal.signal(signal.SIGTERM, signal_handler)
 
     signer = Signer(config, password_db, gpg)
     signer.sign_loop()

@@ -4,11 +4,9 @@ COPY ./signnode.repo /etc/yum.repos.d/signnode.repo
 RUN dnf install -y epel-release && \
     dnf upgrade -y && \
     dnf install -y --enablerepo="powertools" --enablerepo="epel" --enablerepo="signnode" \
-        python3 gcc gcc-c++ python3-devel python3-virtualenv cmake \
-        python3-pycurl libicu libicu-devel python3-lxml git tree mlocate mc createrepo_c \
-        python3-createrepo_c xmlsec1-openssl-devel cpio\
-        kernel-rpm-macros python3-libmodulemd dpkg-dev mock debootstrap pbuilder apt apt-libs \
-        python3-apt keyrings-filesystem ubu-keyring debian-keyring raspbian-keyring qemu-user-static pinentry && \
+        python3 python3-devel python3-virtualenv \
+        python3-pycurl git tree mlocate keyrings-filesystem \
+        ubu-keyring debian-keyring raspbian-keyring && \
     dnf clean all
 
 RUN curl https://raw.githubusercontent.com/vishnubob/wait-for-it/master/wait-for-it.sh -o wait_for_it.sh && chmod +x wait_for_it.sh
