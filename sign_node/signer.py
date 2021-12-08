@@ -107,6 +107,7 @@ class Signer(object):
         downloaded = []
         has_rpms = False
         response_payload = {'build_id': task['build_id'], 'success': True}
+        packages = {}
         try:
             for package in task["packages"]:
                 package_type = package.get("type", "rpm")
@@ -127,30 +128,35 @@ class Signer(object):
                     sign_deb_package(
                         self.__gpg, package_path, pgp_keyid, pgp_key_password
                     )
+                # Preparing the payload for returning to web server
+                signed_package = package.copy()
+                signed_package.pop('download_url')
+                packages[package['id']] = signed_package
             if has_rpms:
                 # NOTE: if a build contains a lot of packages with long names
                 #       the expanded path can exceed shell limits and crash
                 #       the rpmsign process so we have to sign packages in
                 #       smaller portions.
-                for platform_dir in os.listdir(rpms_dir):
-                    sign_rpm_package(
-                        os.path.join(rpms_dir, platform_dir, "*.rpm"),
-                        pgp_keyid,
-                        pgp_key_password,
-                    )
+                sign_rpm_package(
+                    os.path.join(rpms_dir, "*/*.rpm"),
+                    pgp_keyid,
+                    pgp_key_password,
+                )
             # upload signed packages and report the task completion
             for package_id, file_name, package_path in downloaded:
-                self._upload_artifact(
-                    task["id"], package_id, file_name, package_path
-                )
+                uploaded = self._upload_artifact(package_path)
+                packages[package_id]['href'] = uploaded.href
+            response_payload['packages'] = list(packages.values())
         except Exception:
             error_message = traceback.format_exc()
             response_payload['success'] = False
             response_payload['error_message'] = error_message
         finally:
+            logging.info('Response payload:')
+            logging.info(response_payload)
             self._report_signed_build(task["id"], response_payload)
-            # if os.path.exists(task_dir):
-            #     shutil.rmtree(task_dir)
+            if os.path.exists(task_dir):
+                shutil.rmtree(task_dir)
 
     def _report_signed_build(self, task_id, response_payload):
         """
@@ -168,13 +174,14 @@ class Signer(object):
                 "Server side error: {0}".format(response.get("error", "unknown"))
             )
 
-    def _upload_artifact(self, task_id, package_id, file_name, file_path):
-        artifacts_dir = Path(file_path) / Path(file_name)
+    def _upload_artifact(self, file_path):
+        artifacts_dir = os.path.dirname(file_path)
+        logging.info('Artifacts dir: %s', artifacts_dir)
         logging.info(
-            "Uploading %s signed package", os.path.basename(artifacts_dir)
+            "Uploading %s signed package", os.path.basename(file_path)
         )
         artifacts = self.__pulp_uploader.upload(str(artifacts_dir))
-        return artifacts
+        return artifacts[0]
 
     def _download_package(self, download_dir, package, try_count=3):
         """
