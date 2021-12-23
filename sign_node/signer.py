@@ -9,10 +9,12 @@ import pprint
 import shutil
 import time
 import traceback
-import urllib
+import urllib.parse
 import requests
+import requests.adapters
 
 from pathlib import Path
+from urllib3 import Retry
 
 from sign_node.utils.file_utils import download_file, hash_file, safe_mkdir
 from sign_node.uploaders.pulp import PulpRpmUploader
@@ -42,6 +44,23 @@ class Signer(object):
         }
         if config.development_mode:
             self.__download_credentials["no_ssl_verify"] = True
+        self.__session = self.__generate_request_session()
+
+    def __generate_request_session(self):
+        retry_strategy = Retry(
+            total=10,
+            backoff_factor=1,
+            raise_on_status=True,
+        )
+        adapter = requests.adapters.HTTPAdapter(
+            max_retries=retry_strategy)
+        session = requests.Session()
+        session.headers.update({
+            'Authorization': f'Bearer {self.__config.jwt_token}',
+        })
+        session.mount('http://', adapter)
+        session.mount('https://', adapter)
+        return session
 
     def sign_loop(self):
         while True:
@@ -66,9 +85,9 @@ class Signer(object):
                     f'Traceback: {traceback.format_exc()}'
                 )
                 logging.error(msg)
-                self.__call_master(
-                    "sign_done", task_id=task["id"], msg=msg
-                )
+                response_payload = {'build_id': task['build_id'],
+                                    'success': False, 'error_message': msg}
+                self._report_signed_build(task['id'], response_payload)
                 continue
 
     def _sign_build(self, task):
@@ -80,58 +99,66 @@ class Signer(object):
         task : dict
             Sign task.
         """
-        pgp_keyid = task["pgp_keyid"]
+        pgp_keyid = task["keyid"]
         pgp_key_password = self.__password_db.get_password(pgp_keyid)
-        task_dir = os.path.join(self.__config.working_dir, task["id"])
+        task_dir = os.path.join(self.__config.working_dir, str(task["id"]))
         rpms_dir = os.path.join(task_dir, "rpms")
         debs_dir = os.path.join(task_dir, "debs")
         downloaded = []
         has_rpms = False
+        response_payload = {'build_id': task['build_id'], 'success': True}
+        packages = {}
         try:
-            for platform, packages in task["packages"].items():
-                for package in packages:
-                    package_type = package.get("package_type", "rpm")
-                    if package_type in ("deb", "dsc"):
-                        download_dir = debs_dir
-                    else:
-                        download_dir = rpms_dir
-                        has_rpms = True
-                    package_path = self._download_package(
-                        download_dir, platform, package
+            for package in task["packages"]:
+                package_type = package.get("type", "rpm")
+                if package_type in ("deb", "dsc"):
+                    download_dir = debs_dir
+                else:
+                    download_dir = rpms_dir
+                    has_rpms = True
+                package_path = self._download_package(download_dir, package)
+                downloaded.append(
+                    (package["id"], package["name"], package_path)
+                )
+                if package_type == "dsc":
+                    sign_dsc_package(
+                        self.__gpg, package_path, pgp_keyid, pgp_key_password
                     )
-                    downloaded.append(
-                        (platform, package["id"], package["file_name"], package_path)
+                elif package_type == "deb":
+                    sign_deb_package(
+                        self.__gpg, package_path, pgp_keyid, pgp_key_password
                     )
-                    if package_type == "dsc":
-                        sign_dsc_package(
-                            self.__gpg, package_path, pgp_keyid, pgp_key_password
-                        )
-                    elif package_type == "deb":
-                        sign_deb_package(
-                            self.__gpg, package_path, pgp_keyid, pgp_key_password
-                        )
+                # Preparing the payload for returning to web server
+                signed_package = package.copy()
+                signed_package.pop('download_url')
+                packages[package['id']] = signed_package
             if has_rpms:
                 # NOTE: if a build contains a lot of packages with long names
                 #       the expanded path can exceed shell limits and crash
                 #       the rpmsign process so we have to sign packages in
                 #       smaller portions.
-                for platform_dir in os.listdir(rpms_dir):
-                    sign_rpm_package(
-                        os.path.join(rpms_dir, platform_dir, "*/*.rpm"),
-                        pgp_keyid,
-                        pgp_key_password,
-                    )
-            # upload signed packages and report the task completion
-            for platform, package_id, file_name, package_path in downloaded:
-                self._upload_artifact(
-                    task["id"], platform, package_id, file_name, package_path
+                sign_rpm_package(
+                    os.path.join(rpms_dir, "*/*.rpm"),
+                    pgp_keyid,
+                    pgp_key_password,
                 )
-            self._report_signed_build(task["id"])
+            # upload signed packages and report the task completion
+            for package_id, file_name, package_path in downloaded:
+                uploaded = self._upload_artifact(package_path)
+                packages[package_id]['href'] = uploaded.href
+            response_payload['packages'] = list(packages.values())
+        except Exception:
+            error_message = traceback.format_exc()
+            response_payload['success'] = False
+            response_payload['error_message'] = error_message
         finally:
+            logging.info('Response payload:')
+            logging.info(response_payload)
+            self._report_signed_build(task["id"], response_payload)
             if os.path.exists(task_dir):
                 shutil.rmtree(task_dir)
 
-    def _report_signed_build(self, task_id):
+    def _report_signed_build(self, task_id, response_payload):
         """
         Reports a build sign completion to the master.
 
@@ -140,21 +167,23 @@ class Signer(object):
         task_id : str
             Sign task identifier.
         """
-        response = self.__call_master("sign_done", task_id=task_id)
+        response = self.__call_master(f'{task_id}/complete',
+                                      **response_payload)
         if not response["success"]:
             raise Exception(
                 "Server side error: {0}".format(response.get("error", "unknown"))
             )
 
-    def _upload_artifact(self, task_id, platform, package_id, file_name, file_path):
-        artifacts_dir = Path(file_path) / Path(file_name)
+    def _upload_artifact(self, file_path):
+        artifacts_dir = os.path.dirname(file_path)
+        logging.info('Artifacts dir: %s', artifacts_dir)
         logging.info(
-            "Uploading %s signed package", os.path.basename(artifacts_dir)
+            "Uploading %s signed package", os.path.basename(file_path)
         )
-        artifacts = self._pulp_uploader.upload(artifacts_dir)
-        return artifacts
+        artifacts = self.__pulp_uploader.upload(str(artifacts_dir))
+        return artifacts[0]
 
-    def _download_package(self, download_dir, platform, package, try_count=3):
+    def _download_package(self, download_dir, package, try_count=3):
         """
         Downloads the specified package from the Build System server and checks
         the download file checksum.
@@ -163,8 +192,6 @@ class Signer(object):
         ----------
         download_dir : str
             Download directory base path.
-        platform : str
-            Build platform name.
         package : dict
             Package information.
         try_count : int, optional
@@ -180,23 +207,25 @@ class Signer(object):
         castor.errors.ConnectionError
             If the package download is failed.
         """
-        package_dir = os.path.join(download_dir, platform, package["id"])
+        package_dir = os.path.join(download_dir, str(package["id"]))
         safe_mkdir(package_dir)
-        package_path = os.path.join(package_dir, package["file_name"])
+        package_path = os.path.join(package_dir, package["name"])
         download_url = package["download_url"]
         last_exc = None
         for i in range(1, try_count + 1):
             logging.debug("Downloading %s %d/%d", download_url, i, try_count)
             try:
-                download_file(download_url, package_path, **self.__download_credentials)
-                checksum = hash_file(package_path, get_hasher("sha256"))
-                if checksum != package["checksum"]:
-                    raise ValueError(f"Checksum does not match for {download_url}.")
+                download_file(download_url, package_path)
+                # FIXME: check checksum later
+                # checksum = hash_file(package_path, get_hasher("sha256"))
+                # if checksum != package["checksum"]:
+                #     raise ValueError(f"Checksum does not match for {download_url}.")
                 return package_path
             except Exception as e:
                 last_exc = e
                 logging.error(
-                    "Cannot download %s: %s.\nTraceback:\n%s", download_url, str(e), traceback.format_exc()
+                    "Cannot download %s: %s.\nTraceback:\n%s",
+                    download_url, str(e), traceback.format_exc()
                 )
         raise last_exc
 
@@ -209,26 +238,16 @@ class Signer(object):
         dict or None
             Task to process or None if master didn't return a task.
         """
-        pgp_keyids = list(self.__config.pgp_keys)
+        pgp_keyids = list(self.__config.pgp_keys.keys())
         response = self.__call_master(
-            "get_task", pgp_keyids=pgp_keyids
+            "get_sign_task", key_ids=pgp_keyids
         )
-        if not response:
-            raise Exception(
-                "Server side error: {0}.\nTraceback: {1}".format(
-                    response.get("error", "unknown"), traceback.format_exc()
-                )
-            )
         return response
 
     def __call_master(self, endpoint, **parameters):
         full_url = urllib.parse.urljoin(
-            self.__config.master_url, f"sign_node/{endpoint}"
+            self.__config.master_url, f"sign-tasks/{endpoint}/"
         )
-        headers = {"authorization": f"Bearer {self.__config.jwt_token}"}
-        if endpoint == "sign_done":
-            response = requests.post(full_url, json=parameters, headers=headers)
-        else:
-            response = requests.get(full_url, json=parameters, headers=headers)
+        response = self.__session.post(full_url, json=parameters)
         response.raise_for_status()
         return response.json()

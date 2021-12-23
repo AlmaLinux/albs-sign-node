@@ -6,16 +6,13 @@
 CloudLinux Build System builds sign node configuration storage.
 """
 
-import platform
-import re
-
-from .errors import ConfigurationError
 from .utils.config import BaseConfig
 from .utils.file_utils import normalize_path
 
 __all__ = ["SignNodeConfig"]
 
 
+DEFAULT_MASTER_URL = 'http://web_server:8000/api/v1/'
 DEFAULT_PULP_HOST = "http://pulp"
 DEFAULT_PULP_USER = "pulp"
 DEFAULT_PULP_PASSWORD = "test_pwd"
@@ -37,12 +34,8 @@ class SignNodeConfig(BaseConfig):
         default_config = {
             "development_mode": False,
             "pgp_keys": {},
-            "private_key_path": "~/.config/sign_node/"
-            "{0}.key_secret".format(platform.node()),
-            "public_key_path": "~/.config/sign_node/" "{0}.key".format(platform.node()),
+            "master_url": DEFAULT_MASTER_URL,
             "node_id": self.generate_node_id(postfix=".sign"),
-            "master_key_path": "~/.config/sign_node/build_server.key",
-            "master_url": "tcp://127.0.0.1:32167",
             "working_dir": "/srv/alternatives/sign_node",
             "pulp_host": DEFAULT_PULP_HOST,
             "pulp_user": DEFAULT_PULP_USER,
@@ -56,28 +49,10 @@ class SignNodeConfig(BaseConfig):
                 "required": True,
                 "empty": False,
             },
-            "private_key_path": {
-                "type": "string",
-                "required": True,
-                "coerce": normalize_path,
-            },
-            "public_key_path": {
-                "type": "string",
-                "required": True,
-                "coerce": normalize_path,
-            },
             "node_id": {"type": "string", "required": True},
-            "master_key_path": {
-                "type": "string",
-                "required": True,
-                "coerce": normalize_path,
-            },
             "master_url": {"type": "string", "required": True},
-            "working_dir": {
-                "type": "string",
-                "required": True,
-                "coerce": normalize_path,
-            },
+            "working_dir": {"type": "string", "required": True,
+                            "coerce": normalize_path},
             "pulp_host": {"type": "string", "nullable": False},
             "pulp_user": {"type": "string", "nullable": False},
             "pulp_password": {"type": "string", "nullable": False},
