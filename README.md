@@ -10,7 +10,9 @@ The process to fulfill the task:
 * Sends the status to the Web-Server.
 
 After the task is completed, a user will get a message `task is completed`. If there is no task for the Sign Node, a user will get a message `no task to be signed`.
-As Build System works with different package types - RPM and DEB - there are different algorithms to sign them. For RPM, python code emulates bash command `rpmsign`, for DEB a python wrap is used for Debian signing commands.
+
+Build System works with RPM packages, so to sign them python code emulates bash command `rpmsign`.
+
 
 # Running docker-compose 
 
