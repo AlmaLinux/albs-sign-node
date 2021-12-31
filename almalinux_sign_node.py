@@ -32,7 +32,11 @@ def main():
         return errno.EINVAL
 
     gpg = init_gpg()
-    password_db = PGPPasswordDB(gpg, config.pgp_keys.copy())
+    password_db = PGPPasswordDB(
+        gpg, config.pgp_keys.copy(),
+        development_mode=config.development_mode,
+        development_password=config.dev_pgp_key_password
+    )
     try:
         password_db.ask_for_passwords()
     except ConfigurationError as e:

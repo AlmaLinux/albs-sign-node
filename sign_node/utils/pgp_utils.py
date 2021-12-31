@@ -99,7 +99,8 @@ def verify_pgp_key_password(gpg, keyid, password):
 
 
 class PGPPasswordDB(object):
-    def __init__(self, gpg, pgp_keys):
+    def __init__(self, gpg, pgp_keys, development_mode: bool = False,
+                 development_password: str = None):
         """
         Password DB initialization.
 
@@ -111,7 +112,13 @@ class PGPPasswordDB(object):
             List of PGP keyids.
         """
         self.__gpg = gpg
-        self.__keys = {keyid: {'password': pgp_keys[keyid]} for keyid in pgp_keys}
+        self.__keys = {keyid: {'password': ''} for keyid in pgp_keys}
+        if development_mode and not development_password:
+            raise ConfigurationError('You need to provide development PGP '
+                                     'password when running in development '
+                                     'mode')
+        self.__development_mode = development_mode
+        self.__development_password = development_password
 
     def ask_for_passwords(self):
         """
@@ -123,14 +130,20 @@ class PGPPasswordDB(object):
             If a private GPG key is not found or an entered password is
             incorrect.
         """
-        existent_keys = {key["keyid"]: key for key in self.__gpg.list_keys(True)}
+        existent_keys = {key["keyid"]: key
+                         for key in self.__gpg.list_keys(True)}
         for keyid in self.__keys:
             key = existent_keys.get(keyid)
             if not key:
                 raise ConfigurationError(
-                    "PGP key {0} is not found in the " "gnupg2 database".format(keyid)
+                    "PGP key {0} is not found in the " "gnupg2 "
+                    "database".format(keyid)
                 )
-            password = self.__keys[keyid]['password']
+            if self.__development_mode:
+                password = self.__development_password
+            else:
+                password = getpass.getpass('\nPlease enter the {0} PGP key '
+                                           'password: '.format(keyid))
             if not verify_pgp_key_password(self.__gpg, keyid, password):
                 raise ConfigurationError(
                     "PGP key {0} password is not valid".format(keyid)
