@@ -101,6 +101,7 @@ class Signer(object):
         """
         pgp_keyid = task["keyid"]
         pgp_key_password = self.__password_db.get_password(pgp_keyid)
+        fingerprint = self.__password_db.get_fingerprint(pgp_keyid)
         task_dir = os.path.join(self.__config.working_dir, str(task["id"]))
         rpms_dir = os.path.join(task_dir, "rpms")
         debs_dir = os.path.join(task_dir, "debs")
@@ -130,6 +131,7 @@ class Signer(object):
                     )
                 # Preparing the payload for returning to web server
                 signed_package = package.copy()
+                signed_package['fingerprint'] = fingerprint
                 signed_package.pop('download_url')
                 packages[package['id']] = signed_package
             if has_rpms:
