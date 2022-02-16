@@ -13,12 +13,12 @@ import traceback
 import tempfile
 import urllib.parse
 from urllib3 import Retry
-import subprocess
 
 import websocket
 import requests
 import requests.adapters
 import plumbum
+import pexpect
 
 from sign_node.utils.file_utils import download_file, hash_file, safe_mkdir
 from sign_node.uploaders.pulp import PulpRpmUploader
@@ -84,30 +84,32 @@ class Signer(object):
                 logging.exception('Sync queue recieved exception:')
 
     def on_sync_request(self, queue, message):
-        payload = json.loads(message)
-        pgp_key_password = self.__password_db.get_password(
-            payload['key_id']
-        )
-        plumbum.local.env['TEMP_SIGN_KEY'] = pgp_key_password
         answer = {}
         try:
+            payload = json.loads(message)
+            password = self.__password_db.get_password(
+                payload['key_id']
+            )
             with tempfile.NamedTemporaryFile(mode='w') as fd:
                 fd.write(payload['content'])
                 fd.flush()
-                # We are not taking plumbum command directly, since
-                # there is no way not to escape shell variable
-                sign_cmd = plumbum.local['gpg'].formulate()
-                sign_cmd.extend([
-                    '--yes', '--detach-sign', '--armor', '--batch',
-                    '--passphrase', '"$TEMP_SIGN_KEY"',
-                    '--default-key', payload['key_id'],
-                    fd.name
-                ])
-                logging.error(sign_cmd)
-                subprocess.check_output(sign_cmd)
+                sign_cmd = plumbum.local['gpg'][
+                    '--yes', '--detach-sign', '--armor',
+                    '--default-key', payload['key_id'], fd.name
+                ]
+                out, status = pexpect.run(
+                    command=' '.join(sign_cmd.formulate()),
+                    events={"Enter passphrase:.*": "{0}\r".format(password)},
+                    env={"LC_ALL": "en_US.UTF-8"},
+                    timeout=1200,
+                    withexitstatus=1,
+                )
+                if status != 0:
+                    message = f'gpg failed to sign file, error: {out}'
+                    logging.error(message)
+                    raise Exception(message)
                 answer['asc_content'] = open(f'{fd.name}.asc', 'r').read()
                 os.unlink(f'{fd.name}.asc')
-                del plumbum.local.env['BS_REPOMD_KEY']
         except Exception:
             answer['error'] = traceback.format_exc()
         queue.send(json.dumps(answer))
