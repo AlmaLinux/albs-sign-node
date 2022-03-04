@@ -302,6 +302,6 @@ class Signer(object):
         full_url = urllib.parse.urljoin(
             self.__config.master_url, f"sign-tasks/{endpoint}/"
         )
-        response = self.__session.post(full_url, json=parameters)
+        response = self.__session.post(full_url, json=parameters, timeout=10)
         response.raise_for_status()
         return response.json()
