@@ -12,6 +12,7 @@ import time
 import traceback
 import tempfile
 import urllib.parse
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from urllib3 import Retry
 
 import websocket
@@ -197,9 +198,14 @@ class Signer(object):
                     pgp_key_password,
                 )
             # upload signed packages and report the task completion
-            for package_id, file_name, package_path in downloaded:
-                uploaded = self._upload_artifact(package_path)
-                packages[package_id]['href'] = uploaded.href
+            with ThreadPoolExecutor(max_workers=4) as executor:
+                futures = {executor.submit(
+                    self._upload_artifact, package_path): package_id
+                    for package_id, file_name, package_path in downloaded}
+                for future in as_completed(futures):
+                    result = future.result()
+                    package_id = futures[future]
+                    packages[package_id]['href'] = result.href
             response_payload['packages'] = list(packages.values())
         except Exception:
             error_message = traceback.format_exc()
