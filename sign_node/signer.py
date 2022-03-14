@@ -199,6 +199,7 @@ class Signer(object):
                 )
             # upload signed packages and report the task completion
             files_to_upload = {}
+            packages_hrefs = {}
             for package_id, file_name, package_path in downloaded:
                 sha256 = hash_file(package_path, hash_type='sha256')
                 if sha256 not in files_to_upload:
@@ -214,7 +215,13 @@ class Signer(object):
                 for future in as_completed(futures):
                     result = future.result()
                     package_id = futures[future]
+                    package_name = packages[package_id]['name']
                     packages[package_id]['href'] = result.href
+                    packages_hrefs[package_name] = result.href
+            # Fill href for packages of the same architecture
+            for id_, package in packages.items():
+                if not package.get('href'):
+                    packages[id_]['href'] = packages_hrefs[package['name']]
             response_payload['packages'] = list(packages.values())
         except Exception:
             error_message = traceback.format_exc()
