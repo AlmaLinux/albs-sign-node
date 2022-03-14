@@ -198,10 +198,19 @@ class Signer(object):
                     pgp_key_password,
                 )
             # upload signed packages and report the task completion
+            files_to_upload = {}
+            for package_id, file_name, package_path in downloaded:
+                sha256 = hash_file(package_path, hash_type='sha256')
+                if sha256 not in files_to_upload:
+                    files_to_upload[sha256] = (
+                        package_id, file_name, package_path)
             with ThreadPoolExecutor(max_workers=4) as executor:
-                futures = {executor.submit(
-                    self._upload_artifact, package_path): package_id
-                    for package_id, file_name, package_path in downloaded}
+                futures = {
+                    executor.submit(
+                        self._upload_artifact, package_path): package_id
+                    for package_id, file_name, package_path
+                    in files_to_upload.values()
+                }
                 for future in as_completed(futures):
                     result = future.result()
                     package_id = futures[future]
