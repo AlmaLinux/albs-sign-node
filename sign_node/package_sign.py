@@ -245,9 +245,16 @@ def sign_rpm_package(path, keyid, password):
         command=cmd,
         events={"Enter passphrase:.*": "{0}\r".format(password)},
         env={"LC_ALL": "en_US.UTF-8"},
-        timeout=1200,
+        timeout=100000,
         withexitstatus=1,
     )
+    if status is None:
+        message = (
+            f"The RPM signing command is failed with timeout."
+            f"\nCommand: {cmd}\nOutput:\n{out}"
+        )
+        logging.error(message)
+        raise PackageSignError(message)
     if status != 0:
         logging.error(
             "The RPM signing command is failed with %s exit code."
