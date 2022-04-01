@@ -8,6 +8,7 @@ import json
 import logging
 import pprint
 import shutil
+import glob
 import time
 import traceback
 import tempfile
@@ -188,15 +189,22 @@ class Signer(object):
                 signed_package.pop('download_url')
                 packages[package['id']] = signed_package
             if has_rpms:
-                # NOTE: if a build contains a lot of packages with long names
-                #       the expanded path can exceed shell limits and crash
-                #       the rpmsign process so we have to sign packages in
-                #       smaller portions.
-                sign_rpm_package(
-                    os.path.join(rpms_dir, "*/*.rpm"),
-                    pgp_keyid,
-                    pgp_key_password,
-                )
+                packages_to_sign = []
+                for package in glob.glob(os.path.join(rpms_dir, '*/*.rpm')):
+                    packages_to_sign.append(package)
+                    if len(packages_to_sign) % 50 == 0:
+                        sign_rpm_package(
+                            ' '.join(packages_to_sign),
+                            pgp_keyid,
+                            pgp_key_password,
+                        )
+                        packages_to_sign = []
+                if packages_to_sign:
+                    sign_rpm_package(
+                        ' '.join(packages_to_sign),
+                        pgp_keyid,
+                        pgp_key_password,
+                    )
             # upload signed packages and report the task completion
             files_to_upload = {}
             packages_hrefs = {}
