@@ -3,6 +3,7 @@
 # created: 2018-03-31
 
 
+import enum
 import os
 import json
 import logging
@@ -12,6 +13,7 @@ import glob
 import time
 import traceback
 import tempfile
+import typing
 import urllib.parse
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from urllib3 import Retry
@@ -21,16 +23,25 @@ import requests
 import requests.adapters
 import plumbum
 import pexpect
+import rpm
+import pgpy
 
+from sign_node.errors import SignError
 from sign_node.utils.file_utils import download_file, hash_file, safe_mkdir
 from sign_node.uploaders.pulp import PulpRpmUploader
 from sign_node.package_sign import (
     sign_dsc_package, sign_deb_package, sign_rpm_package
 )
 
-from .utils.hashing import get_hasher
 
 __all__ = ["Signer"]
+
+
+class SignStatusEnum(enum.IntEnum):
+    SUCCESS = 1
+    READ_ERROR = 2
+    NO_SIGNATURE = 3
+    WRONG_SIGNATURE = 4
 
 
 class Signer(object):
@@ -144,6 +155,51 @@ class Signer(object):
                 self._report_signed_build(task['id'], response_payload)
                 continue
 
+    def _check_signature(self, files, key_id):
+        errors = []
+        key_id_lower = key_id.lower()
+        ts = rpm.TransactionSet()
+        ts.setVSFlags(rpm._RPMVSF_NOSIGNATURES)
+
+        def check(pkg_path: str) -> typing.Tuple[SignStatusEnum, str]:
+            if not os.path.exists(pkg_path):
+                return SignStatusEnum.READ_ERROR, ''
+
+            with open(pkg_path, 'rb') as fd:
+                header = ts.hdrFromFdno(fd)
+                signature = header[rpm.RPMTAG_SIGGPG]
+                if not signature:
+                    signature = header[rpm.RPMTAG_SIGPGP]
+                if not signature:
+                    return SignStatusEnum.NO_SIGNATURE, ''
+
+            pgp_msg = pgpy.PGPMessage.from_blob(signature)
+            sig = ''
+            for signature in pgp_msg.signatures:
+                sig = signature.signer.lower()
+                if sig == key_id_lower:
+                    return SignStatusEnum.SUCCESS, ''
+
+            return SignStatusEnum.WRONG_SIGNATURE, sig
+
+        with ThreadPoolExecutor(max_workers=10) as executor:
+            futures = {}
+            for file_ in files:
+                futures[executor.submit(check, file_)] = file_
+
+            for future in as_completed(futures):
+                pkg_path = futures[future]
+                result, signature = future.result()
+                if result == SignStatusEnum.READ_ERROR:
+                    errors.append(f'Cannot read file {pkg_path}')
+                elif result == SignStatusEnum.NO_SIGNATURE:
+                    errors.append(f'Package {pkg_path} is not signed')
+                elif result == SignStatusEnum.WRONG_SIGNATURE:
+                    errors.append(f'Package {pkg_path} is signed '
+                                  f'with the wrong key: {signature}')
+
+        return errors
+
     def _sign_build(self, task):
         """
         Signs packages from the specified task and uploads them to the server.
@@ -208,11 +264,22 @@ class Signer(object):
             # upload signed packages and report the task completion
             files_to_upload = {}
             packages_hrefs = {}
+            files_to_check = list()
             for package_id, file_name, package_path in downloaded:
                 sha256 = hash_file(package_path, hash_type='sha256')
                 if sha256 not in files_to_upload:
                     files_to_upload[sha256] = (
                         package_id, file_name, package_path)
+                    files_to_check.append(package_path)
+                packages[package_id]['sha256'] = sha256
+
+            sign_errors = self._check_signature(files_to_check, pgp_keyid)
+            if sign_errors:
+                error_message = 'Errors during checking packages ' \
+                                'signatures: \n{}'.format('\n'.join(sign_errors))
+                logging.error(error_message)
+                raise SignError(error_message)
+
             with ThreadPoolExecutor(max_workers=4) as executor:
                 futures = {
                     executor.submit(
@@ -264,8 +331,7 @@ class Signer(object):
         logging.info(
             "Uploading %s signed package", os.path.basename(file_path)
         )
-        artifacts = self.__pulp_uploader.upload(str(artifacts_dir))
-        return artifacts[0]
+        return self.__pulp_uploader.upload_single_file(file_path)
 
     def _download_package(self, download_dir, package, try_count=3):
         """

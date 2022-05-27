@@ -220,6 +220,7 @@ class PulpBaseUploader(BaseUploader):
             name=os.path.basename(filename),
             href=reference,
             type="rpm" if filename.endswith(".rpm") else "build_log",
+            sha256=file_sha256,
         )
 
 
