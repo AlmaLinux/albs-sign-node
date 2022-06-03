@@ -181,9 +181,8 @@ class Signer(object):
                 sig = signature.signer.lower()
                 if sig == key_id_lower:
                     return SignStatusEnum.SUCCESS, ''
-                else:
-                    if subkeys and sig in subkeys:
-                        return SignStatusEnum.SUCCESS, ''
+                elif subkeys and sig in subkeys:
+                    return SignStatusEnum.SUCCESS, ''
 
             return SignStatusEnum.WRONG_SIGNATURE, sig
 
