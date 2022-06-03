@@ -90,3 +90,7 @@ class LockError(Exception):
     """A resource lock acquiring error."""
 
     pass
+
+
+class SignError(ValueError):
+    pass

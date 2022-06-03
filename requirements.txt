@@ -12,3 +12,4 @@ pydantic==1.8.1
 pexpect==4.8.0
 python-gnupg==0.4.8
 websocket-client==0.59.0
+pgpy==0.5.4

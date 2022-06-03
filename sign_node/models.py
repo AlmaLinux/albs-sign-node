@@ -17,3 +17,4 @@ class Artifact(BaseModel):
     name: str
     type: str
     href: str
+    sha256: str
