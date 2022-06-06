@@ -160,8 +160,7 @@ class Signer(object):
         key_id_lower = key_id.lower()
         ts = rpm.TransactionSet()
         ts.setVSFlags(rpm._RPMVSF_NOSIGNATURES)
-        subkeys = [i.lower() for i in self.__password_db.get_subkeys(
-            key_id, [])]
+        subkeys = [i.lower() for i in self.__password_db.get_subkeys(key_id)]
 
         def check(pkg_path: str) -> typing.Tuple[SignStatusEnum, str]:
             if not os.path.exists(pkg_path):
