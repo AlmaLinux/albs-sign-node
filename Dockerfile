@@ -1,11 +1,11 @@
 FROM almalinux:8
 
 COPY ./signnode.repo /etc/yum.repos.d/signnode.repo
-COPY ./codenotary.repo /etc/yum.repos.d/codenotary.repo
+RUN curl https://packages.codenotary.org/codenotary.repo -o /etc/yum.repos.d/codenotary.repo
 
 RUN dnf install -y epel-release && \
     dnf upgrade -y && \
-    dnf install -y --enablerepo="powertools" --enablerepo="epel" --enablerepo="signnode" --enablerepo="codenotary" \
+    dnf install -y --enablerepo="powertools" --enablerepo="epel" --enablerepo="signnode" --enablerepo="codenotary-repo" \
         rpm-sign python3 python3-devel python3-virtualenv git \
         python3-pycurl tree mlocate keyrings-filesystem pinentry \
         ubu-keyring debian-keyring raspbian-keyring cas && \
