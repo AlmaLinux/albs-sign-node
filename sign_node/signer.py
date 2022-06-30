@@ -28,6 +28,7 @@ import pgpy
 
 from sign_node.errors import SignError
 from sign_node.utils.file_utils import download_file, hash_file, safe_mkdir
+from sign_node.utils.codenotary import Codenotary
 from sign_node.uploaders.pulp import PulpRpmUploader
 from sign_node.package_sign import (
     sign_dsc_package, sign_deb_package, sign_rpm_package
@@ -61,6 +62,12 @@ class Signer(object):
         }
         if config.development_mode:
             self.__download_credentials["no_ssl_verify"] = True
+        self.__notar_enabled = self.__config.codenotary_enabled()
+        if self.__notar_enabled:
+            self.__notary = Codenotary(
+                self.__config.cas_api_key,
+                self.__config.cas_signer_id,
+            )
         self.__session = self.__generate_request_session()
 
     def __generate_request_session(self):
@@ -231,9 +238,19 @@ class Signer(object):
                     download_dir = rpms_dir
                     has_rpms = True
                 package_path = self._download_package(download_dir, package)
-                downloaded.append(
-                    (package["id"], package["name"], package_path)
-                )
+                verification = None
+                if self.__notar_enabled and package.get("cas_hash"):
+                    verification = self.__notary.verify_artifact(package_path)
+                    if not verification:
+                        raise SignError(
+                            f'Package {package} cannot be verified by codenotary'
+                        )
+                downloaded.append((
+                    package["id"],
+                    package["name"],
+                    package_path,
+                    verification,
+                ))
                 if package_type == "dsc":
                     sign_dsc_package(
                         self.__gpg, package_path, pgp_keyid, pgp_key_password
@@ -268,7 +285,12 @@ class Signer(object):
             files_to_upload = {}
             packages_hrefs = {}
             files_to_check = list()
-            for package_id, file_name, package_path in downloaded:
+            for package_id, file_name, package_path, old_meta in downloaded:
+                if self.__notar_enabled:
+                    cas_hash = self.__notary.notarize_artifact(
+                        package_path, old_meta
+                    )
+                    packages[package_id]['cas_hash'] = cas_hash
                 sha256 = hash_file(package_path, hash_type='sha256')
                 if sha256 not in files_to_upload:
                     files_to_upload[sha256] = (

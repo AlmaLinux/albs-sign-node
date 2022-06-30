@@ -1,12 +1,14 @@
 FROM almalinux:8
 
 COPY ./signnode.repo /etc/yum.repos.d/signnode.repo
+COPY ./codenotary.repo /etc/yum.repos.d/codenotary.repo
+
 RUN dnf install -y epel-release && \
     dnf upgrade -y && \
-    dnf install -y --enablerepo="powertools" --enablerepo="epel" --enablerepo="signnode" \
-        rpm-sign python3 python3-devel python3-virtualenv \
+    dnf install -y --enablerepo="powertools" --enablerepo="epel" --enablerepo="signnode" --enablerepo="codenotary" \
+        rpm-sign python3 python3-devel python3-virtualenv git \
         python3-pycurl tree mlocate keyrings-filesystem pinentry \
-        ubu-keyring debian-keyring raspbian-keyring && \
+        ubu-keyring debian-keyring raspbian-keyring cas && \
     dnf clean all
 
 RUN curl https://raw.githubusercontent.com/vishnubob/wait-for-it/master/wait-for-it.sh -o wait_for_it.sh && chmod +x wait_for_it.sh
