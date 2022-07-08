@@ -62,7 +62,7 @@ class Signer(object):
         }
         if config.development_mode:
             self.__download_credentials["no_ssl_verify"] = True
-        self.__notar_enabled = self.__config.codenotary_enabled()
+        self.__notar_enabled = self.__config.codenotary_enabled
         if self.__notar_enabled:
             self.__notary = Codenotary(
                 self.__config.cas_api_key,

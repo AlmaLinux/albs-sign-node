@@ -75,5 +75,6 @@ class SignNodeConfig(BaseConfig):
             default_config, config_file, schema, **cmd_args
         )
     
+    @property
     def codenotary_enabled(self) -> bool:
         return bool(self.cas_api_key)
