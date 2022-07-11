@@ -1,5 +1,7 @@
 from cas_wrapper import CasWrapper
 
+from plumbum import ProcessExecutionError
+
 
 class Codenotary:
 
@@ -10,10 +12,16 @@ class Codenotary:
         )
 
     def verify_artifact(self, package_path: str) -> dict:
-        response = self.wrapper.authenticate_artifact(
-            package_path, return_json=True
-        )
-        if not response['verified']:
+        response = None
+        try:
+            self.wrapper.ensure_login()
+            response = self.wrapper.authenticate(
+                package_path,
+                return_json=True,
+            )
+        except ProcessExecutionError:
+            return False
+        if not response or not response['verified']:
             return False
         return response
 
