@@ -7,7 +7,6 @@
 CloudLinux Build System builds sign node.
 """
 
-import errno
 import sys
 import threading
 
@@ -30,7 +29,6 @@ def main():
         config = SignNodeConfig(config_file)
     except ValueError as e:
         args_parser.error('Configuration error: {0}'.format(e))
-        return errno.EINVAL
 
     gpg = init_gpg()
     password_db = PGPPasswordDB(
@@ -42,7 +40,6 @@ def main():
         password_db.ask_for_passwords()
     except ConfigurationError as e:
         args_parser.error(str(e))
-        return errno.EACCES
 
     init_working_dir(config.working_dir)
 
