@@ -286,7 +286,7 @@ class Signer(object):
             packages_hrefs = {}
             files_to_check = list()
             for package_id, file_name, package_path, old_meta in downloaded:
-                if self.__notar_enabled:
+                if self.__notar_enabled and old_meta is not None:
                     cas_hash = self.__notary.notarize_artifact(
                         package_path, old_meta
                     )
