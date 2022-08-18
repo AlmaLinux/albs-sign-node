@@ -13,4 +13,4 @@ pexpect==4.8.0
 python-gnupg==0.4.8
 websocket-client==0.59.0
 pgpy==0.5.4
-git+https://git.almalinux.org/almalinux/cas_wrapper.git@0.0.2#egg=cas_wrapper
+git+https://git.almalinux.org/almalinux/cas_wrapper.git@0.0.3#egg=cas_wrapper
