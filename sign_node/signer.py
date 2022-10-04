@@ -45,7 +45,6 @@ gpg_scenario_template = (
     'Subkey-Length: 2048\n'
     'Name-Real: %(sign_key_uid)s\n'
     'Expire-Date: 0\n'
-    'Passphrase: \n'
 )
 
 
