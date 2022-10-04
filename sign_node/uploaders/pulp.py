@@ -4,6 +4,7 @@ import os
 import tempfile
 import time
 import shutil
+import typing
 from typing import List
 
 from fsplit.filesplit import Filesplit
@@ -154,7 +155,11 @@ class PulpBaseUploader(BaseUploader):
             if temp_dir and os.path.exists(temp_dir):
                 shutil.rmtree(temp_dir)
 
-    def _send_file(self, file_path: str):
+    def _send_file(self, file_path: str) -> typing.Tuple[str, str]:
+        file_sha256 = hash_file(file_path, hash_type="sha256")
+        reference = self.check_if_artifact_exists(file_sha256)
+        if reference:
+            return file_sha256, reference
         reference, file_size = self._create_upload(file_path)
         if file_size > self._chunk_size:
             self._put_large_file(file_path, reference)
@@ -163,14 +168,14 @@ class PulpBaseUploader(BaseUploader):
                 f"bytes 0-{file_size - 1}/{file_size}", reference, file_path
             )
         artifact_href = self._commit_upload(file_path, reference)
-        return artifact_href
+        return file_sha256, artifact_href
 
     def check_if_artifact_exists(self, sha256: str) -> str:
         response = self._artifacts_client.list(sha256=sha256)
         if response.results:
             return response.results[0].pulp_href
 
-    def upload(self, artifacts_dir: str) -> List[str]:
+    def upload(self, artifacts_dir: str, **kwargs) -> List[str]:
         """
 
         Parameters
@@ -198,13 +203,18 @@ class PulpBaseUploader(BaseUploader):
             raise UploadError(f"Unable to upload files: {errored_uploads}")
         return artifacts
 
-    def upload_single_file(self, filename: str) -> Artifact:
+    def upload_single_file(
+            self, filename: str,
+            artifact_type: typing.Optional[str] = None,
+    ) -> Artifact:
         """
 
         Parameters
         ----------
-        artifacts_dir : str
+        filename : str
             Path to files that need to be uploaded.
+        artifact_type : str or None
+            Type of uploaded artifact
 
         Returns
         -------
@@ -212,14 +222,13 @@ class PulpBaseUploader(BaseUploader):
             List of the references to the artifacts inside Pulp
 
         """
-        file_sha256 = hash_file(filename, hash_type="sha256")
-        reference = self.check_if_artifact_exists(file_sha256)
-        if not reference:
-            reference = self._send_file(filename)
+        file_sha256, reference = self._send_file(filename)
+        if artifact_type is None:
+            artifact_type = 'rpm' if filename.endswith('.rpm') else 'build_log'
         return Artifact(
             name=os.path.basename(filename),
             href=reference,
-            type="rpm" if filename.endswith(".rpm") else "build_log",
+            type=artifact_type,
             sha256=file_sha256,
         )
 

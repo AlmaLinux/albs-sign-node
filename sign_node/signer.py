@@ -37,6 +37,17 @@ from sign_node.package_sign import (
 
 __all__ = ["Signer"]
 
+gpg_scenario_template = (
+    '%no-protection\n'
+    'Key-Type: RSA\n'
+    'Key-Length: 2048\n'
+    'Subkey-Type: default\n'
+    'Subkey-Length: 2048\n'
+    'Name-Real: %(sign_key_uid)s\n'
+    'Expire-Date: 0\n'
+    'Passphrase: \n'
+)
+
 
 class SignStatusEnum(enum.IntEnum):
     SUCCESS = 1
@@ -134,33 +145,78 @@ class Signer(object):
             answer['error'] = traceback.format_exc()
         queue.send(json.dumps(answer))
 
+    @staticmethod
+    def _generate_key_uid(task: typing.Dict):
+        return (
+            f"{task['user_name']}/{task['product_name']} "
+            f"ALBS community repo <{task['user_email']}>"
+        )
+
+    def report_signed_build(self, task: typing.Dict, msg: str):
+        response_payload = {
+            'build_id': task['build_id'],
+            'success': False,
+            'error_message': msg,
+        }
+        self._report_signed_build(task['id'], response_payload)
+
+    def report_generated_sign_key(self, task: typing.Dict, msg: str):
+        sign_key_name = self._generate_key_uid(task)
+        response_payload = {
+            'key_name': sign_key_name,
+            'success': False,
+            'error_message': msg,
+        }
+        self._report_generated_sign_key(
+            task['sign_task_id'],
+            response_payload
+        )
+
     def sign_loop(self):
         while True:
-            task = None
+            sign_task = None
+            gen_sign_key_task = None
             try:
-                task = self._request_task()
+                sign_task = self._request_sign_task()
+                gen_sign_key_task = self._request_gen_sign_key_task()
             except Exception:
-                logging.exception('Can\'t recieve new task from web server')
-            if not task:
-                logging.debug("There is no task to sign")
+                logging.exception('Can\'t receive new task from web server')
+            if not sign_task and not gen_sign_key_task:
+                logging.debug("There is no task to process")
                 time.sleep(30)
                 continue
-            logging.info(
-                "Signing the following task:\n%s", pprint.pformat(task)
-            )
-            try:
-                self._sign_build(task)
-                logging.info("the %s task is signed", task["id"])
-            except Exception as e:
-                msg = (
-                    f'Signing failed: {e}.\n'
-                    f'Traceback: {traceback.format_exc()}'
+            for task, processing_method, report_method in (
+                (
+                        sign_task,
+                        self._sign_build,
+                        self.report_signed_build,
+                ),
+                (
+                        gen_sign_key_task,
+                        self.generate_sign_key,
+                        self.report_generated_sign_key,
+                ),
+            ):
+                if not task:
+                    continue
+                logging.info(
+                    "Processing the following task:\n%s",
+                    pprint.pformat(task)
                 )
-                logging.error(msg)
-                response_payload = {'build_id': task['build_id'],
-                                    'success': False, 'error_message': msg}
-                self._report_signed_build(task['id'], response_payload)
-                continue
+                task_id = task['id']
+                try:
+                    processing_method(task)
+                    logging.info("The %s task is processed", task_id)
+                except Exception as e:
+                    logging.exception('Can\'t process task from web server')
+                    msg = (
+                        f'Processing failed: {e}.\n'
+                        f'Traceback: {traceback.format_exc()}'
+                    )
+                    report_method(
+                        task=task,
+                        msg=msg
+                    )
 
     def _check_signature(self, files, key_id):
         errors = []
@@ -209,6 +265,127 @@ class Signer(object):
                                   f'with the wrong key: {signature}')
 
         return errors
+
+    @staticmethod
+    def _write_file_content(path, content, mode='w'):
+        with open(path, mode=mode) as fd:
+            fd.write(content)
+
+    @staticmethod
+    def _extract_key_fingerprint(keyid: str) -> str:
+        fingerprint_cmd = plumbum.local['gpg'][
+            '-k',
+            keyid,
+        ]
+        _, stdout, _ = fingerprint_cmd.run()
+
+        key_fingerprint = stdout.split('\n')[1].strip()
+        return key_fingerprint
+
+    def _export_key(
+            self,
+            fingerprint: str,
+            task_dir: str,
+            is_public_key: bool,
+    ) -> str:
+        key_type = 'public' if is_public_key else 'private'
+        key_file_name = f'{fingerprint}_{key_type}'
+        key_path = os.path.join(task_dir, key_file_name)
+        export_key_cmd = plumbum.local['gpg'][
+            '-a',
+            '--batch',
+            '--export' if is_public_key else '--export-secret-keys',
+            fingerprint,
+        ]
+        logging.info(
+            'Export %s PGP key for fingerprint: %s',
+            key_type,
+            fingerprint,
+        )
+        _, stdout, _ = export_key_cmd.run()
+        self._write_file_content(
+            path=key_path,
+            content=stdout,
+        )
+        return key_file_name
+
+    def _generate_sign_key(
+            self,
+            sign_key_uid: str,
+            task_dir: str,
+    ) -> str:
+        gpg_scenario = gpg_scenario_template % {
+            'sign_key_uid': sign_key_uid,
+        }
+        scenario_path = os.path.join(task_dir, 'gpg-scenario')
+        self._write_file_content(
+            path=scenario_path,
+            content=gpg_scenario,
+        )
+        generate_sign_key_cmd = plumbum.local['gpg'][
+            '--batch',
+            '--gen-key',
+            scenario_path,
+        ]
+        logging.info('Generate PGP key for UID: %s', sign_key_uid)
+        _, _, stderr = generate_sign_key_cmd.run()
+        # the needed string looks like
+        # 'gpg: key 29237BFE7EBF38BE marked as ultimately trusted'
+        keyid = stderr.split('\n')[0].split('gpg: key ')[1].split(' ')[0]
+        fingerprint = self._extract_key_fingerprint(keyid=keyid)
+        return fingerprint
+
+    def generate_sign_key(self, task):
+        sign_key_uid = self._generate_key_uid(task)
+        task_dir = os.path.join(
+            self.__config.working_dir,
+            str(task['sign_task_id'])
+        )
+        if not os.path.exists(task_dir):
+            os.makedirs(task_dir, exist_ok=True)
+
+        fingerprint = self._generate_sign_key(
+            sign_key_uid=sign_key_uid,
+            task_dir=task_dir,
+        )
+        public_key_file_name = self._export_key(
+            fingerprint=fingerprint,
+            task_dir=task_dir,
+            is_public_key=True,
+        )
+        self._export_key(
+            fingerprint=fingerprint,
+            task_dir=task_dir,
+            is_public_key=False,
+        )
+        public_key_file_path = os.path.join(
+            task_dir,
+            public_key_file_name,
+        )
+        logging.info(
+            'Upload public PGP key for UID "%s" to Pulp',
+            sign_key_uid,
+        )
+        artifact = self.__pulp_uploader.upload_single_file(
+            filename=public_key_file_path,
+            artifact_type='public_pgp_key',
+        )
+        response_payload = {
+            'success': True,
+            'error_message': '',
+            'sign_key_href': artifact.href,
+            'key_name': sign_key_uid,
+            'fingerprint': fingerprint,
+            'file_name': public_key_file_name,
+        }
+        logging.info(
+            'Response payload "%s"',
+            response_payload,
+        )
+        self._report_signed_build(
+            task_id=task['sign_task_id'],
+            response_payload=response_payload,
+        )
 
     def _sign_build(self, task):
         """
@@ -350,6 +527,24 @@ class Signer(object):
                 "Server side error: {0}".format(response.get("error", "unknown"))
             )
 
+    def _report_generated_sign_key(self, task_id, response_payload):
+        """
+        Reports generating of a sign key completion to the master.
+
+        Parameters
+        ----------
+        task_id : str
+            Generating sign key task identifier.
+        """
+        response = self.__call_master(
+            f'community/{task_id}/complete',
+            **response_payload
+        )
+        if not response["success"]:
+            raise Exception(
+                "Server side error: {0}".format(response.get("error", "unknown"))
+            )
+
     def _upload_artifact(self, file_path):
         artifacts_dir = os.path.dirname(file_path)
         logging.info('Artifacts dir: %s', artifacts_dir)
@@ -358,7 +553,8 @@ class Signer(object):
         )
         return self.__pulp_uploader.upload_single_file(file_path)
 
-    def _download_package(self, download_dir, package, try_count=3):
+    @staticmethod
+    def _download_package(download_dir, package, try_count=3):
         """
         Downloads the specified package from the Build System server and checks
         the download file checksum.
@@ -404,7 +600,7 @@ class Signer(object):
                 )
         raise last_exc
 
-    def _request_task(self):
+    def _request_sign_task(self) -> typing.Dict:
         """
         Requests a new signing task from the master.
 
@@ -417,6 +613,18 @@ class Signer(object):
         response = self.__call_master(
             "get_sign_task", key_ids=pgp_keyids
         )
+        return response
+
+    def _request_gen_sign_key_task(self) -> typing.Dict:
+        """
+        Requests a new generating sign key task from the master
+
+        Returns
+        -------
+        dict or None
+            Task to process or None if master didn't return a task.
+        """
+        response = self.__call_master("get_sign_task")
         return response
 
     def __call_master(self, endpoint, **parameters):
