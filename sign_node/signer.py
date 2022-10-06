@@ -151,7 +151,7 @@ class Signer(object):
             f"ALBS community repo <{task['user_email']}>"
         )
 
-    def report_signed_build(self, task: typing.Dict, msg: str):
+    def report_signed_build_error(self, task: typing.Dict, msg: str):
         response_payload = {
             'build_id': task['build_id'],
             'success': False,
@@ -159,7 +159,7 @@ class Signer(object):
         }
         self._report_signed_build(task['id'], response_payload)
 
-    def report_generated_sign_key(self, task: typing.Dict, msg: str):
+    def report_generate_sign_key_error(self, task: typing.Dict, msg: str):
         sign_key_name = self._generate_key_uid(task)
         response_payload = {
             'key_name': sign_key_name,
@@ -167,7 +167,7 @@ class Signer(object):
             'error_message': msg,
         }
         self._report_generated_sign_key(
-            task['sign_task_id'],
+            task['id'],
             response_payload
         )
 
@@ -184,16 +184,16 @@ class Signer(object):
                 logging.debug("There is no task to process")
                 time.sleep(30)
                 continue
-            for task, processing_method, report_method in (
+            for task, processing_method, report_error_method in (
                 (
                         sign_task,
                         self._sign_build,
-                        self.report_signed_build,
+                        self.report_signed_build_error,
                 ),
                 (
                         gen_sign_key_task,
                         self.generate_sign_key,
-                        self.report_generated_sign_key,
+                        self.report_generate_sign_key_error,
                 ),
             ):
                 if not task:
@@ -212,7 +212,7 @@ class Signer(object):
                         f'Processing failed: {e}.\n'
                         f'Traceback: {traceback.format_exc()}'
                     )
-                    report_method(
+                    report_error_method(
                         task=task,
                         msg=msg
                     )
@@ -335,11 +335,10 @@ class Signer(object):
         return fingerprint
 
     def generate_sign_key(self, task):
+        task_id = task['id']
         sign_key_uid = self._generate_key_uid(task)
         task_dir = os.path.join(
-            self.__config.working_dir,
-            str(task['sign_task_id'])
-        )
+            self.__config.working_dir, f'gen_key_{task_id}')
         if not os.path.exists(task_dir):
             os.makedirs(task_dir, exist_ok=True)
 
@@ -381,8 +380,8 @@ class Signer(object):
             'Response payload "%s"',
             response_payload,
         )
-        self._report_signed_build(
-            task_id=task['sign_task_id'],
+        self._report_generated_sign_key(
+            task_id=task_id,
             response_payload=response_payload,
         )
 
@@ -623,7 +622,7 @@ class Signer(object):
         dict or None
             Task to process or None if master didn't return a task.
         """
-        response = self.__call_master("get_sign_task")
+        response = self.__call_master("get_gen_sign_key_task")
         return response
 
     def __call_master(self, endpoint, **parameters):
