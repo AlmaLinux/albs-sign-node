@@ -43,7 +43,7 @@ gpg_scenario_template = (
     'Key-Length: 2048\n'
     'Subkey-Type: default\n'
     'Subkey-Length: 2048\n'
-    'Name-Real: %(sign_key_uid)s\n'
+    'Name-Real: {sign_key_uid}\n'
     'Expire-Date: 0\n'
 )
 
@@ -216,6 +216,7 @@ class Signer(object):
                         task=task,
                         msg=msg
                     )
+                    continue
 
     def _check_signature(self, files, key_id):
         errors = []
@@ -284,12 +285,12 @@ class Signer(object):
     def _export_key(
             self,
             fingerprint: str,
-            task_dir: str,
+            backup_dir: str,
             is_public_key: bool,
     ) -> str:
         key_type = 'public' if is_public_key else 'private'
         key_file_name = f'{fingerprint}_{key_type}'
-        key_path = os.path.join(task_dir, key_file_name)
+        key_path = os.path.join(backup_dir, key_file_name)
         export_key_cmd = plumbum.local['gpg'][
             '-a',
             '--batch',
@@ -313,9 +314,7 @@ class Signer(object):
             sign_key_uid: str,
             task_dir: str,
     ) -> str:
-        gpg_scenario = gpg_scenario_template % {
-            'sign_key_uid': sign_key_uid,
-        }
+        gpg_scenario = gpg_scenario_template.format(sign_key_uid=sign_key_uid)
         scenario_path = os.path.join(task_dir, 'gpg-scenario')
         self._write_file_content(
             path=scenario_path,
@@ -338,24 +337,27 @@ class Signer(object):
         task_id = task['id']
         sign_key_uid = self._generate_key_uid(task)
         task_dir = os.path.join(
-            self.__config.working_dir, f'gen_key_{task_id}')
+            self.__config.working_dir,
+            f'gen_key_{task_id}',
+        )
+        backup_dir = os.path.join(
+            self.__config.working_dir,
+            'community_keys_backups',
+        )
         if not os.path.exists(task_dir):
             os.makedirs(task_dir, exist_ok=True)
+        if not os.path.exists(backup_dir):
+            os.makedirs(backup_dir, exist_ok=True)
 
         fingerprint = self._generate_sign_key(
             sign_key_uid=sign_key_uid,
             task_dir=task_dir,
         )
-        public_key_file_name = self._export_key(
-            fingerprint=fingerprint,
-            task_dir=task_dir,
-            is_public_key=True,
-        )
-        self._export_key(
-            fingerprint=fingerprint,
-            task_dir=task_dir,
-            is_public_key=False,
-        )
+        public_key_file_name = self._export_key(fingerprint=fingerprint,
+                                                backup_dir=task_dir,
+                                                is_public_key=True)
+        self._export_key(fingerprint=fingerprint, backup_dir=backup_dir,
+                         is_public_key=False)
         public_key_file_path = os.path.join(
             task_dir,
             public_key_file_name,
