@@ -16,6 +16,7 @@ import tempfile
 import typing
 import urllib.parse
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from datetime import datetime
 from urllib3 import Retry
 
 import websocket
@@ -210,6 +211,10 @@ class Signer(object):
 
         return errors
 
+    @staticmethod
+    def timedelta_seconds(start_time: datetime, finish_time: datetime) -> int:
+        return int((finish_time - start_time).total_seconds())
+
     def _sign_build(self, task):
         """
         Signs packages from the specified task and uploads them to the server.
@@ -229,6 +234,8 @@ class Signer(object):
         has_rpms = False
         response_payload = {'build_id': task['build_id'], 'success': True}
         packages = {}
+        stats = {}
+        start_time = datetime.utcnow()
         try:
             for package in task["packages"]:
                 package_type = package.get("type", "rpm")
@@ -264,6 +271,10 @@ class Signer(object):
                 signed_package['fingerprint'] = fingerprint
                 signed_package.pop('download_url')
                 packages[package['id']] = signed_package
+            finish_time = datetime.utcnow()
+            stats['download_packages_time'] = self.timedelta_seconds(
+                start_time, finish_time)
+            start_time = datetime.utcnow()
             if has_rpms:
                 packages_to_sign = []
                 for package in glob.glob(os.path.join(rpms_dir, '*/*.rpm')):
@@ -281,8 +292,15 @@ class Signer(object):
                         pgp_keyid,
                         pgp_key_password,
                     )
+            finish_time = datetime.utcnow()
+            stats['sign_packages_time'] = self.timedelta_seconds(
+                start_time, finish_time)
+            start_time = datetime.utcnow()
             # upload signed packages and report the task completion
-            files_to_upload = {}
+            # Sort files for parallel and sequential upload by their size
+            files_to_upload = set()
+            parallel_upload_files = {}
+            sequential_upload_files = {}
             packages_hrefs = {}
             files_to_check = list()
             for package_id, file_name, package_path, old_meta in downloaded:
@@ -293,24 +311,39 @@ class Signer(object):
                     packages[package_id]['cas_hash'] = cas_hash
                 sha256 = hash_file(package_path, hash_type='sha256')
                 if sha256 not in files_to_upload:
-                    files_to_upload[sha256] = (
-                        package_id, file_name, package_path)
+                    if (os.stat(package_path).st_size <=
+                            self.__config.parallel_upload_file_size):
+                        parallel_upload_files[sha256] = (
+                            package_id, file_name, package_path)
+                    else:
+                        sequential_upload_files[sha256] = (
+                            package_id, file_name, package_path)
+                    files_to_upload.add(sha256)
                     files_to_check.append(package_path)
                 packages[package_id]['sha256'] = sha256
 
+            finish_time = datetime.utcnow()
+            stats['notarization_packages_time'] = self.timedelta_seconds(
+                start_time, finish_time)
+            start_time = datetime.utcnow()
+
             sign_errors = self._check_signature(files_to_check, pgp_keyid)
+            finish_time = datetime.utcnow()
+            stats['signature_check_packages_time'] = self.timedelta_seconds(
+                start_time, finish_time)
             if sign_errors:
                 error_message = 'Errors during checking packages ' \
                                 'signatures: \n{}'.format('\n'.join(sign_errors))
                 logging.error(error_message)
                 raise SignError(error_message)
 
+            start_time = datetime.utcnow()
             with ThreadPoolExecutor(max_workers=4) as executor:
                 futures = {
                     executor.submit(
                         self._upload_artifact, package_path): package_id
                     for package_id, file_name, package_path
-                    in files_to_upload.values()
+                    in parallel_upload_files.values()
                 }
                 for future in as_completed(futures):
                     result = future.result()
@@ -318,11 +351,19 @@ class Signer(object):
                     package_name = packages[package_id]['name']
                     packages[package_id]['href'] = result.href
                     packages_hrefs[package_name] = result.href
+            for p_id, file_name, pkg_path in sequential_upload_files.values():
+                uploaded = self._upload_artifact(pkg_path)
+                packages[p_id]['href'] = uploaded.href
+                packages_hrefs[file_name] = uploaded.href
             # Fill href for packages of the same architecture
             for id_, package in packages.items():
                 if not package.get('href'):
                     packages[id_]['href'] = packages_hrefs[package['name']]
             response_payload['packages'] = list(packages.values())
+            finish_time = datetime.utcnow()
+            stats['upload_packages_time'] = self.timedelta_seconds(
+                start_time, finish_time)
+            response_payload['stats'] = stats
         except Exception:
             error_message = traceback.format_exc()
             response_payload['success'] = False

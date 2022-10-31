@@ -18,6 +18,8 @@ DEFAULT_PULP_HOST = "http://pulp"
 DEFAULT_PULP_USER = "pulp"
 DEFAULT_PULP_PASSWORD = "test_pwd"
 DEFAULT_PULP_CHUNK_SIZE = 8388608  # 8 MiB
+# Max file size to allow parallel upload for
+DEFAULT_PARALLEL_FILE_UPLOAD_SIZE = 52428800  # 500 MB
 DEFAULT_PGP_PASSWORD = "test_pwd"
 DEFAULT_CAS_API_KEY = None
 DEFAULT_CAS_SIGNER_ID = None
@@ -46,6 +48,7 @@ class SignNodeConfig(BaseConfig):
             "pulp_user": DEFAULT_PULP_USER,
             "pulp_password": DEFAULT_PULP_PASSWORD,
             "pulp_chunk_size": DEFAULT_PULP_CHUNK_SIZE,
+            "parallel_upload_file_size": DEFAULT_PARALLEL_FILE_UPLOAD_SIZE,
             "dev_pgp_key_password": DEFAULT_PGP_PASSWORD,
             "cas_api_key": DEFAULT_CAS_API_KEY,
             "cas_signer_id": DEFAULT_CAS_SIGNER_ID,
@@ -66,6 +69,7 @@ class SignNodeConfig(BaseConfig):
             "pulp_user": {"type": "string", "nullable": False},
             "pulp_password": {"type": "string", "nullable": False},
             "pulp_chunk_size": {"type": "integer", "nullable": False},
+            "parallel_upload_file_size": {"type": "integer", "nullable": False},
             "jwt_token": {"type": "string", "nullable": True},
             "dev_pgp_key_password": {"type": "string", "nullable": False},
             "cas_api_key": {"type": "string", "nullable": True},
