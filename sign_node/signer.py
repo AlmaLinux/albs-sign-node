@@ -224,6 +224,24 @@ class Signer(object):
         task : dict
             Sign task.
         """
+
+        def download_package(pkg: dict):
+            verification = None
+            package_type = package.get("type", "rpm")
+            if package_type in ("deb", "dsc"):
+                download_dir = debs_dir
+            else:
+                download_dir = rpms_dir
+            pkg_path = self._download_package(download_dir, pkg)
+            if self.__notar_enabled and pkg.get("cas_hash"):
+                verification = self.__notary.verify_artifact(pkg_path)
+                if not verification:
+                    raise SignError(
+                        f'Package {pkg} cannot be verified by codenotary'
+                    )
+
+            return pkg, (pkg["id"], pkg["name"], pkg_path, verification)
+
         pgp_keyid = task["keyid"]
         pgp_key_password = self.__password_db.get_password(pgp_keyid)
         fingerprint = self.__password_db.get_fingerprint(pgp_keyid)
@@ -236,41 +254,26 @@ class Signer(object):
         packages = {}
         stats = {}
         start_time = datetime.utcnow()
+
+        # Detect if there are some RPMs in the payload
+        for package in task["packages"]:
+            package_type = package.get("type", "rpm")
+            if package_type == 'rpm':
+                has_rpms = True
+                break
+
         try:
-            for package in task["packages"]:
-                package_type = package.get("type", "rpm")
-                if package_type in ("deb", "dsc"):
-                    download_dir = debs_dir
-                else:
-                    download_dir = rpms_dir
-                    has_rpms = True
-                package_path = self._download_package(download_dir, package)
-                verification = None
-                if self.__notar_enabled and package.get("cas_hash"):
-                    verification = self.__notary.verify_artifact(package_path)
-                    if not verification:
-                        raise SignError(
-                            f'Package {package} cannot be verified by codenotary'
-                        )
-                downloaded.append((
-                    package["id"],
-                    package["name"],
-                    package_path,
-                    verification,
-                ))
-                if package_type == "dsc":
-                    sign_dsc_package(
-                        self.__gpg, package_path, pgp_keyid, pgp_key_password
-                    )
-                elif package_type == "deb":
-                    sign_deb_package(
-                        self.__gpg, package_path, pgp_keyid, pgp_key_password
-                    )
-                # Preparing the payload for returning to web server
-                signed_package = package.copy()
-                signed_package['fingerprint'] = fingerprint
-                signed_package.pop('download_url')
-                packages[package['id']] = signed_package
+            with ThreadPoolExecutor(max_workers=4) as executor:
+                futures = [executor.submit(download_package, package)
+                           for package in task['packages']]
+                for future in as_completed(futures):
+                    package, downloaded_info = future.result()
+                    # Preparing the payload for returning to web server
+                    signed_package = package.copy()
+                    signed_package['fingerprint'] = fingerprint
+                    signed_package.pop('download_url')
+                    packages[package['id']] = signed_package
+                    downloaded.append(downloaded_info)
             finish_time = datetime.utcnow()
             stats['download_packages_time'] = self.timedelta_seconds(
                 start_time, finish_time)
