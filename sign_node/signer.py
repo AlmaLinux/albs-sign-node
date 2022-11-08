@@ -15,6 +15,7 @@ import traceback
 import tempfile
 import typing
 import urllib.parse
+from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
 from urllib3 import Retry
@@ -111,12 +112,17 @@ class Signer(object):
             password = self.__password_db.get_password(
                 payload['key_id']
             )
+            sig_type = defaultdict(
+                lambda: '--detach-sign',
+                **{'clear-sign': '--clear-sign',
+                   'detach-sign': '--detach-sign'})
             with tempfile.NamedTemporaryFile(mode='w') as fd:
+                asc_file_name = f'{fd.name}.asc'
                 fd.write(payload['content'])
                 fd.flush()
                 sign_cmd = plumbum.local['gpg'][
-                    '--yes', '--detach-sign', '--armor',
-                    '--default-key', payload['key_id'], fd.name
+                    '--yes', sig_type[payload.get('sig_type', 'detach-sign')],
+                    '--armor', '--default-key', payload['key_id'], fd.name
                 ]
                 out, status = pexpect.run(
                     command=' '.join(sign_cmd.formulate()),
@@ -129,8 +135,9 @@ class Signer(object):
                     message = f'gpg failed to sign file, error: {out}'
                     logging.error(message)
                     raise Exception(message)
-                answer['asc_content'] = open(f'{fd.name}.asc', 'r').read()
-                os.unlink(f'{fd.name}.asc')
+                answer['asc_content'] = open(asc_file_name, 'r').read()
+                if os.path.exists(asc_file_name):
+                    os.unlink(asc_file_name)
         except Exception:
             answer['error'] = traceback.format_exc()
         queue.send(json.dumps(answer))
