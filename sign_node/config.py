@@ -21,6 +21,9 @@ DEFAULT_PULP_CHUNK_SIZE = 8388608  # 8 MiB
 # Max file size to allow parallel upload for
 DEFAULT_PARALLEL_FILE_UPLOAD_SIZE = 52428800  # 500 MB
 DEFAULT_PGP_PASSWORD = "test_pwd"
+DEFAULT_SENTRY_DSN = ""
+DEFAULT_SENTRY_ENVIRONMENT = "dev"
+DEFAULT_SENTRY_TRACES_SAMPLE_RATE = 0.2
 DEFAULT_CAS_API_KEY = None
 DEFAULT_CAS_SIGNER_ID = None
 
@@ -50,6 +53,9 @@ class SignNodeConfig(BaseConfig):
             "pulp_chunk_size": DEFAULT_PULP_CHUNK_SIZE,
             "parallel_upload_file_size": DEFAULT_PARALLEL_FILE_UPLOAD_SIZE,
             "dev_pgp_key_password": DEFAULT_PGP_PASSWORD,
+            'sentry_dsn': DEFAULT_SENTRY_DSN,
+            'sentry_environment': DEFAULT_SENTRY_ENVIRONMENT,
+            'sentry_traces_sample_rate': DEFAULT_SENTRY_TRACES_SAMPLE_RATE,
             "cas_api_key": DEFAULT_CAS_API_KEY,
             "cas_signer_id": DEFAULT_CAS_SIGNER_ID,
         }
@@ -72,13 +78,16 @@ class SignNodeConfig(BaseConfig):
             "parallel_upload_file_size": {"type": "integer", "nullable": False},
             "jwt_token": {"type": "string", "nullable": True},
             "dev_pgp_key_password": {"type": "string", "nullable": False},
+            "sentry_dsn": {"type": "string", "nullable": True},
+            "sentry_environment": {"type": "string", "nullable": True},
+            "sentry_traces_sample_rate": {"type": "float", "nullable": True},
             "cas_api_key": {"type": "string", "nullable": True},
             "cas_signer_id": {"type": "string", "nullable": True},
         }
         super(SignNodeConfig, self).__init__(
             default_config, config_file, schema, **cmd_args
         )
-    
+
     @property
     def codenotary_enabled(self) -> bool:
         return bool(self.cas_api_key)
