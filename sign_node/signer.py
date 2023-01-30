@@ -94,7 +94,7 @@ class Signer(object):
                 queue = websocket.WebSocketApp(
                     urllib.parse.urljoin(
                         self.__config.ws_master_url,
-                        'sign_task_queue/'
+                        'sign-tasks/sign_task_queue/'
                     ),
                     on_message=self.on_sync_request,
                     header={
