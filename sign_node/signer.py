@@ -249,6 +249,8 @@ class Signer(object):
 
             return pkg, (pkg["id"], pkg["name"], pkg_path, verification)
 
+        stats = {}
+        stats["sign_task_start_time"] = str(datetime.utcnow())
         pgp_keyid = task["keyid"]
         pgp_key_password = self.__password_db.get_password(pgp_keyid)
         fingerprint = self.__password_db.get_fingerprint(pgp_keyid)
@@ -259,7 +261,6 @@ class Signer(object):
         has_rpms = False
         response_payload = {'build_id': task['build_id'], 'success': True}
         packages = {}
-        stats = {}
         start_time = datetime.utcnow()
 
         # Detect if there are some RPMs in the payload
