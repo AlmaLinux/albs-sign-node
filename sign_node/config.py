@@ -13,7 +13,6 @@ __all__ = ["SignNodeConfig"]
 
 
 DEFAULT_MASTER_URL = 'http://web_server:8000/api/v1/'
-DEFAULT_WS_MASTER_URL = 'ws://web_server:8000/api/v1/'
 DEFAULT_PULP_HOST = "http://pulp"
 DEFAULT_PULP_USER = "pulp"
 DEFAULT_PULP_PASSWORD = "test_pwd"
@@ -44,7 +43,6 @@ class SignNodeConfig(BaseConfig):
             "development_mode": False,
             "pgp_keys": {},
             "master_url": DEFAULT_MASTER_URL,
-            "ws_master_url": DEFAULT_WS_MASTER_URL,
             "node_id": self.generate_node_id(postfix=".sign"),
             "working_dir": "/srv/alternatives/sign_node",
             "pulp_host": DEFAULT_PULP_HOST,
@@ -68,7 +66,6 @@ class SignNodeConfig(BaseConfig):
             },
             "node_id": {"type": "string", "required": True},
             "master_url": {"type": "string", "required": True},
-            "ws_master_url": {"type": "string", "required": True},
             "working_dir": {"type": "string", "required": True,
                             "coerce": normalize_path},
             "pulp_host": {"type": "string", "nullable": False},

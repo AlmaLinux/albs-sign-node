@@ -56,8 +56,6 @@ def main():
     init_working_dir(config.working_dir)
 
     signer = Signer(config, password_db, gpg)
-    sync_queue_thread = threading.Thread(target=signer.sync_sign_loop)
-    sync_queue_thread.start()
     signer.sign_loop()
 
 
