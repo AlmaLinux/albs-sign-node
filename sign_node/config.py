@@ -56,8 +56,10 @@ class SignNodeConfig(BaseConfig):
             'sentry_dsn': DEFAULT_SENTRY_DSN,
             'sentry_environment': DEFAULT_SENTRY_ENVIRONMENT,
             'sentry_traces_sample_rate': DEFAULT_SENTRY_TRACES_SAMPLE_RATE,
-            "cas_api_key": DEFAULT_CAS_API_KEY,
-            "cas_signer_id": DEFAULT_CAS_SIGNER_ID,
+            "vcn_lc_api_key": None,
+            "vcn_lc_host": None,
+            "vcn_lc_port": 443,
+            "vcn_binary_path": "/sign-node/",
         }
         schema = {
             "development_mode": {"type": "boolean", "default": False},
@@ -81,13 +83,16 @@ class SignNodeConfig(BaseConfig):
             "sentry_dsn": {"type": "string", "nullable": True},
             "sentry_environment": {"type": "string", "nullable": True},
             "sentry_traces_sample_rate": {"type": "float", "nullable": True},
-            "cas_api_key": {"type": "string", "nullable": True},
-            "cas_signer_id": {"type": "string", "nullable": True},
+            "vcn_lc_api_key": {"type": "string", "nullable": True},
+            "vcn_lc_host": {"type": "string", "nullable": True},
+            "vcn_lc_port": {"type": "integer", "nullable": True},
+            "vcn_binary_path": {"type": "string", "nullable": True},
+
         }
         super(SignNodeConfig, self).__init__(
-            default_config, config_file, schema, **cmd_args
+            default_config, config_file, schema, **cmd_args,
         )
 
     @property
     def codenotary_enabled(self) -> bool:
-        return bool(self.cas_api_key)
+        return bool(self.vcn_lc_api_key) and bool(self.vcn_lc_host)
