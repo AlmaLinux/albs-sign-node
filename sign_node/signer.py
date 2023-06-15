@@ -16,7 +16,10 @@ import tempfile
 import typing
 import urllib.parse
 from collections import defaultdict
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import (
+    ThreadPoolExecutor,
+    as_completed,
+    )
 from datetime import datetime
 from pathlib import Path
 
@@ -31,12 +34,14 @@ import rpm
 import pgpy
 
 from sign_node.errors import SignError
-from sign_node.utils.file_utils import download_file, hash_file, safe_mkdir
+from sign_node.utils.file_utils import (
+    download_file,
+    hash_file,
+    safe_mkdir,
+)
 from sign_node.utils.codenotary import Codenotary
 from sign_node.uploaders.pulp import PulpRpmUploader
-from sign_node.package_sign import (
-    sign_dsc_package, sign_deb_package, sign_rpm_package
-)
+from sign_node.package_sign import sign_rpm_package
 
 
 __all__ = ["Signer"]
