@@ -107,7 +107,7 @@ class Signer(object):
                 queue = websocket.WebSocketApp(
                     urllib.parse.urljoin(
                         self.__config.ws_master_url,
-                        'sign_task_queue/'
+                        'sign-tasks/sign_task_queue/'
                     ),
                     on_message=self.on_sync_request,
                     header={
@@ -152,9 +152,9 @@ class Signer(object):
                     withexitstatus=1,
                 )
                 if status != 0:
-                    message = f'gpg failed to sign file, error: {out}'
-                    logging.error(message)
-                    raise Exception(message)
+                    message = 'gpg failed to sign file, error: %s'
+                    logging.error(message, out)
+                    raise Exception(message % out)
                 with asc_file_name.open(mode='r') as asc_fd:
                     answer['asc_content'] = asc_fd.read()
                 asc_file_name.unlink(missing_ok=True)
@@ -425,52 +425,61 @@ class Signer(object):
         task : dict
             Sign task.
         """
+
+        def download_package(pkg: dict):
+            verification = None
+            package_type = package.get("type", "rpm")
+            if package_type in ("deb", "dsc"):
+                download_dir = debs_dir
+            else:
+                download_dir = rpms_dir
+            pkg_path = self._download_package(download_dir, pkg)
+            if self.__notar_enabled and pkg.get("cas_hash"):
+                verification = self.__notary.verify_artifact(pkg_path)
+                if not verification:
+                    raise SignError(
+                        f'Package {pkg} cannot be verified by codenotary'
+                    )
+
+            return pkg, (pkg["id"], pkg["name"], pkg_path, verification)
+
+        stats = {}
+        stats["sign_task_start_time"] = str(datetime.utcnow())
         pgp_keyid = task["keyid"]
         pgp_key_password = self.__password_db.get_password(pgp_keyid)
         fingerprint = self.__password_db.get_fingerprint(pgp_keyid)
-        task_dir = os.path.join(self.__working_dir_path, str(task["id"]))
-        rpms_dir = os.path.join(task_dir, "rpms")
-        debs_dir = os.path.join(task_dir, "debs")
+        task_dir = self.__working_dir_path.joinpath(str(task['id']))
+        rpms_dir = task_dir.joinpath('rpms')
+        debs_dir = task_dir.joinpath('debs')
         downloaded = []
         has_rpms = False
         response_payload = {'build_id': task['build_id'], 'success': True}
         packages = {}
+        start_time = datetime.utcnow()
+
+        # Detect if there are some RPMs in the payload
+        for package in task["packages"]:
+            package_type = package.get("type", "rpm")
+            if package_type == 'rpm':
+                has_rpms = True
+                break
+
         try:
-            for package in task["packages"]:
-                package_type = package.get("type", "rpm")
-                if package_type in ("deb", "dsc"):
-                    download_dir = debs_dir
-                else:
-                    download_dir = rpms_dir
-                    has_rpms = True
-                package_path = self._download_package(download_dir, package)
-                verification = None
-                if self.__notar_enabled and package.get("cas_hash"):
-                    verification = self.__notary.verify_artifact(package_path)
-                    if not verification:
-                        raise SignError(
-                            f'Package {package} cannot '
-                            'be verified by codenotary'
-                        )
-                downloaded.append((
-                    package["id"],
-                    package["name"],
-                    package_path,
-                    verification,
-                ))
-                if package_type == "dsc":
-                    sign_dsc_package(
-                        self.__gpg, package_path, pgp_keyid, pgp_key_password
-                    )
-                elif package_type == "deb":
-                    sign_deb_package(
-                        self.__gpg, package_path, pgp_keyid, pgp_key_password
-                    )
-                # Preparing the payload for returning to web server
-                signed_package = package.copy()
-                signed_package['fingerprint'] = fingerprint
-                signed_package.pop('download_url')
-                packages[package['id']] = signed_package
+            with ThreadPoolExecutor(max_workers=4) as executor:
+                futures = [executor.submit(download_package, package)
+                           for package in task['packages']]
+                for future in as_completed(futures):
+                    package, downloaded_info = future.result()
+                    # Preparing the payload for returning to web server
+                    signed_package = package.copy()
+                    signed_package['fingerprint'] = fingerprint
+                    signed_package.pop('download_url')
+                    packages[package['id']] = signed_package
+                    downloaded.append(downloaded_info)
+            finish_time = datetime.utcnow()
+            stats['download_packages_time'] = self.timedelta_seconds(
+                start_time, finish_time)
+            start_time = datetime.utcnow()
             if has_rpms:
                 packages_to_sign = []
                 for package in glob.glob(os.path.join(rpms_dir, '*/*.rpm')):
@@ -488,8 +497,15 @@ class Signer(object):
                         pgp_keyid,
                         pgp_key_password,
                     )
+            finish_time = datetime.utcnow()
+            stats['sign_packages_time'] = self.timedelta_seconds(
+                start_time, finish_time)
+            start_time = datetime.utcnow()
             # upload signed packages and report the task completion
-            files_to_upload = {}
+            # Sort files for parallel and sequential upload by their size
+            files_to_upload = set()
+            parallel_upload_files = {}
+            sequential_upload_files = {}
             packages_hrefs = {}
             files_to_check = list()
             for package_id, file_name, package_path, old_meta in downloaded:
@@ -500,27 +516,39 @@ class Signer(object):
                     packages[package_id]['cas_hash'] = cas_hash
                 sha256 = hash_file(package_path, hash_type='sha256')
                 if sha256 not in files_to_upload:
-                    files_to_upload[sha256] = (
-                        package_id, file_name, package_path)
+                    if (os.stat(package_path).st_size <=
+                            self.__config.parallel_upload_file_size):
+                        parallel_upload_files[sha256] = (
+                            package_id, file_name, package_path)
+                    else:
+                        sequential_upload_files[sha256] = (
+                            package_id, file_name, package_path)
+                    files_to_upload.add(sha256)
                     files_to_check.append(package_path)
                 packages[package_id]['sha256'] = sha256
 
+            finish_time = datetime.utcnow()
+            stats['notarization_packages_time'] = self.timedelta_seconds(
+                start_time, finish_time)
+            start_time = datetime.utcnow()
+
             sign_errors = self._check_signature(files_to_check, pgp_keyid)
+            finish_time = datetime.utcnow()
+            stats['signature_check_packages_time'] = self.timedelta_seconds(
+                start_time, finish_time)
             if sign_errors:
-                error_message = (
-                    'Errors during checking packages signatures: \n{}'.format(
-                        '\n'.join(sign_errors)
-                    )
-                )
+                error_message = 'Errors during checking packages ' \
+                                'signatures: \n{}'.format('\n'.join(sign_errors))
                 logging.error(error_message)
                 raise SignError(error_message)
 
+            start_time = datetime.utcnow()
             with ThreadPoolExecutor(max_workers=4) as executor:
                 futures = {
                     executor.submit(
                         self._upload_artifact, package_path): package_id
                     for package_id, file_name, package_path
-                    in files_to_upload.values()
+                    in parallel_upload_files.values()
                 }
                 for future in as_completed(futures):
                     result = future.result()
@@ -528,13 +556,20 @@ class Signer(object):
                     package_name = packages[package_id]['name']
                     packages[package_id]['href'] = result.href
                     packages_hrefs[package_name] = result.href
+            for p_id, file_name, pkg_path in sequential_upload_files.values():
+                uploaded = self._upload_artifact(pkg_path)
+                packages[p_id]['href'] = uploaded.href
+                packages_hrefs[file_name] = uploaded.href
             # Fill href for packages of the same architecture
             for id_, package in packages.items():
                 if not package.get('href'):
                     packages[id_]['href'] = packages_hrefs[package['name']]
             response_payload['packages'] = list(packages.values())
-        except Exception as err:
-            logging.exception('Cannot sign build because "%s"', err)
+            finish_time = datetime.utcnow()
+            stats['upload_packages_time'] = self.timedelta_seconds(
+                start_time, finish_time)
+            response_payload['stats'] = stats
+        except Exception:
             error_message = traceback.format_exc()
             response_payload['success'] = False
             response_payload['error_message'] = error_message
