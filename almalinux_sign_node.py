@@ -10,6 +10,7 @@ CloudLinux Build System builds sign node.
 import sys
 import threading
 
+import sentry_sdk
 
 from sign_node.errors import ConfigurationError
 from sign_node.config import SignNodeConfig
@@ -18,6 +19,16 @@ from sign_node.signer import Signer
 from sign_node.utils.config import locate_config_file
 from sign_node.utils.log import configure_logger
 from sign_node.utils.pgp_utils import init_gpg, PGPPasswordDB
+
+
+def init_sentry(config: SignNodeConfig):
+    if not config.sentry_dsn:
+        return
+    sentry_sdk.init(
+        dsn=config.sentry_dsn,
+        traces_sample_rate=config.sentry_traces_sample_rate,
+        environment=config.sentry_environment,
+    )
 
 
 def main():
@@ -30,6 +41,7 @@ def main():
     except ValueError as e:
         args_parser.error('Configuration error: {0}'.format(e))
 
+    init_sentry(config)
     gpg = init_gpg()
     password_db = PGPPasswordDB(
         gpg, config.pgp_keys.copy(),
