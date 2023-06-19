@@ -212,15 +212,13 @@ class PulpBaseUploader(BaseUploader):
         Parameters
         ----------
         filename : str
-            Path to files that need to be uploaded.
+            Path to file that need to be uploaded.
         artifact_type : str or None
             Type of uploaded artifact
 
         Returns
         -------
-        list
-            List of the references to the artifacts inside Pulp
-
+        Artifact
         """
         file_sha256, reference = self._send_file(filename)
         if artifact_type is None:

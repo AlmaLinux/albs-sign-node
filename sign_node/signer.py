@@ -44,7 +44,7 @@ from sign_node.uploaders.pulp import PulpRpmUploader
 from sign_node.package_sign import sign_rpm_package
 
 
-__all__ = ["Signer"]
+__all__ = ['Signer']
 
 gpg_scenario_template = (
     '%no-protection\n'
@@ -77,11 +77,11 @@ class Signer(object):
         )
         self.__working_dir_path = Path(self.__config.working_dir)
         self.__download_credentials = {
-            "login": config.node_id,
-            "password": config.jwt_token,
+            'login': config.node_id,
+            'password': config.jwt_token,
         }
         if config.development_mode:
-            self.__download_credentials["no_ssl_verify"] = True
+            self.__download_credentials['no_ssl_verify'] = True
         self.__notar_enabled = self.__config.codenotary_enabled
         if self.__notar_enabled:
             self.__notary = Codenotary(
@@ -121,7 +121,7 @@ class Signer(object):
                 )
                 queue.run_forever(ping_interval=60)
             except Exception as err:
-                logging.exception('Sync queue recieved exception "%s"', err)
+                logging.exception('Sync queue received exception "%s"', err)
 
     def on_sync_request(self, queue, message):
         answer = {}
@@ -151,8 +151,8 @@ class Signer(object):
                 ]
                 out, status = pexpect.run(
                     command=' '.join(sign_cmd.formulate()),
-                    events={"Enter passphrase:.*": "{0}\r".format(password)},
-                    env={"LC_ALL": "en_US.UTF-8"},
+                    events={'Enter passphrase:.*': '{0}\r'.format(password)},
+                    env={'LC_ALL': 'en_US.UTF-8'},
                     timeout=1200,
                     withexitstatus=1,
                 )
@@ -211,7 +211,7 @@ class Signer(object):
                     err,
                 )
             if not sign_task and not gen_sign_key_task:
-                logging.debug("There is no task to process")
+                logging.debug('There is no task to process')
                 time.sleep(30)
                 continue
             for task, processing_method, report_error_method in (
@@ -229,7 +229,7 @@ class Signer(object):
                 if not task:
                     continue
                 logging.info(
-                    "Processing the following task:\n%s",
+                    'Processing the following task:\n%s',
                     pprint.pformat(task)
                 )
                 task_id = task['id']
@@ -433,24 +433,24 @@ class Signer(object):
 
         def download_package(pkg: dict):
             verification = None
-            package_type = package.get("type", "rpm")
-            if package_type in ("deb", "dsc"):
+            package_type = package.get('type', 'rpm')
+            if package_type in ('deb', 'dsc'):
                 download_dir = debs_dir
             else:
                 download_dir = rpms_dir
             pkg_path = self._download_package(download_dir, pkg)
-            if self.__notar_enabled and pkg.get("cas_hash"):
+            if self.__notar_enabled and pkg.get('cas_hash'):
                 verification = self.__notary.verify_artifact(pkg_path)
                 if not verification:
                     raise SignError(
                         f'Package {pkg} cannot be verified by codenotary'
                     )
 
-            return pkg, (pkg["id"], pkg["name"], pkg_path, verification)
+            return pkg, (pkg['id'], pkg['name'], pkg_path, verification)
 
         stats = {}
-        stats["sign_task_start_time"] = str(datetime.utcnow())
-        pgp_keyid = task["keyid"]
+        stats['sign_task_start_time'] = str(datetime.utcnow())
+        pgp_keyid = task['keyid']
         pgp_key_password = self.__password_db.get_password(pgp_keyid)
         fingerprint = self.__password_db.get_fingerprint(pgp_keyid)
         task_dir = self.__working_dir_path.joinpath(str(task['id']))
@@ -463,8 +463,8 @@ class Signer(object):
         start_time = datetime.utcnow()
 
         # Detect if there are some RPMs in the payload
-        for package in task["packages"]:
-            package_type = package.get("type", "rpm")
+        for package in task['packages']:
+            package_type = package.get('type', 'rpm')
             if package_type == 'rpm':
                 has_rpms = True
                 break
@@ -581,7 +581,7 @@ class Signer(object):
         finally:
             logging.info('Response payload:')
             logging.info(response_payload)
-            self._report_signed_build(task["id"], response_payload)
+            self._report_signed_build(task['id'], response_payload)
             if os.path.exists(task_dir):
                 shutil.rmtree(task_dir)
 
@@ -596,10 +596,10 @@ class Signer(object):
         """
         response = self.__call_master(f'{task_id}/complete',
                                       **response_payload)
-        if not response["success"]:
+        if not response['success']:
             raise Exception(
-                "Server side error: {0}".format(
-                    response.get("error", "unknown")
+                'Server side error: {0}'.format(
+                    response.get('error', 'unknown')
                 )
             )
 
@@ -616,10 +616,10 @@ class Signer(object):
             f'community/{task_id}/complete',
             **response_payload
         )
-        if not response["success"]:
+        if not response['success']:
             raise Exception(
-                "Server side error: {0}".format(
-                    response.get("error", "unknown")
+                'Server side error: {0}'.format(
+                    response.get('error', 'unknown')
                 )
             )
 
@@ -627,7 +627,7 @@ class Signer(object):
         artifacts_dir = os.path.dirname(file_path)
         logging.info('Artifacts dir: %s', artifacts_dir)
         logging.info(
-            "Uploading %s signed package", os.path.basename(file_path)
+            'Uploading %s signed package', os.path.basename(file_path)
         )
         return self.__pulp_uploader.upload_single_file(file_path)
 
@@ -656,24 +656,24 @@ class Signer(object):
         castor.errors.ConnectionError
             If the package download is failed.
         """
-        package_dir = os.path.join(download_dir, str(package["id"]))
+        package_dir = os.path.join(download_dir, str(package['id']))
         safe_mkdir(package_dir)
-        package_path = os.path.join(package_dir, package["name"])
-        download_url = package["download_url"]
+        package_path = os.path.join(package_dir, package['name'])
+        download_url = package['download_url']
         last_exc = None
         for i in range(1, try_count + 1):
-            logging.debug("Downloading %s %d/%d", download_url, i, try_count)
+            logging.debug('Downloading %s %d/%d', download_url, i, try_count)
             try:
                 download_file(download_url, package_path)
                 # FIXME: check checksum later
-                # checksum = hash_file(package_path, get_hasher("sha256"))
-                # if checksum != package["checksum"]:
-                #     raise ValueError(f"Checksum does not match for {download_url}.")
+                # checksum = hash_file(package_path, get_hasher('sha256'))
+                # if checksum != package['checksum']:
+                #     raise ValueError(f'Checksum does not match for {download_url}.')
                 return package_path
             except Exception as e:
                 last_exc = e
                 logging.error(
-                    "Cannot download %s: %s.\nTraceback:\n%s",
+                    'Cannot download %s: %s.\nTraceback:\n%s',
                     download_url, str(e), traceback.format_exc()
                 )
         raise last_exc
@@ -689,7 +689,7 @@ class Signer(object):
         """
         pgp_keyids = self.__config.pgp_keys
         response = self.__call_master(
-            "get_sign_task", key_ids=pgp_keyids
+            'get_sign_task', key_ids=pgp_keyids
         )
         return response
 
@@ -702,12 +702,12 @@ class Signer(object):
         dict or None
             Task to process or None if master didn't return a task.
         """
-        response = self.__call_master("get_gen_sign_key_task")
+        response = self.__call_master('get_gen_sign_key_task')
         return response
 
     def __call_master(self, endpoint, **parameters):
         full_url = urllib.parse.urljoin(
-            self.__config.master_url, f"sign-tasks/{endpoint}/"
+            self.__config.master_url, f'sign-tasks/{endpoint}/'
         )
         response = self.__session.post(full_url, json=parameters, timeout=10)
         response.raise_for_status()
