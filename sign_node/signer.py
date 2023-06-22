@@ -350,7 +350,7 @@ class Signer(object):
             self,
             sign_key_uid: str,
             task_dir: Path,
-    ) -> str:
+    ) -> typing.Tuple[str, str]:
         gpg_scenario = gpg_scenario_template.format(sign_key_uid=sign_key_uid)
         scenario_path = task_dir.joinpath('gpg-scenario')
         self._write_file_content(
@@ -368,7 +368,7 @@ class Signer(object):
         # 'gpg: key 29237BFE7EBF38BE marked as ultimately trusted'
         keyid = stderr.split('\n')[0].split('gpg: key ')[1].split(' ')[0]
         fingerprint = self._extract_key_fingerprint(keyid=keyid)
-        return fingerprint
+        return keyid, fingerprint
 
     def generate_sign_key(self, task):
         task_id = task['id']
@@ -378,7 +378,7 @@ class Signer(object):
         task_dir.mkdir(parents=True, exist_ok=True)
         backup_dir.mkdir(parents=True, exist_ok=True)
 
-        fingerprint = self._generate_sign_key(
+        key_id, fingerprint = self._generate_sign_key(
             sign_key_uid=sign_key_uid,
             task_dir=task_dir,
         )
@@ -409,8 +409,10 @@ class Signer(object):
             'error_message': '',
             'sign_key_href': artifact.href,
             'key_name': sign_key_uid,
+            'key_id': key_id,
             'fingerprint': fingerprint,
             'file_name': public_key_file_name,
+            'platform_id': task['platform_id'],
         }
         logging.info(
             'Response payload "%s"',
@@ -702,7 +704,7 @@ class Signer(object):
         dict or None
             Task to process or None if master didn't return a task.
         """
-        response = self.__call_master('get_gen_sign_key_task')
+        response = self.__call_master('community/get_gen_sign_key_task')
         return response
 
     def __call_master(self, endpoint, **parameters):
