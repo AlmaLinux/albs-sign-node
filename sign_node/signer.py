@@ -85,8 +85,10 @@ class Signer(object):
         self.__notar_enabled = self.__config.codenotary_enabled
         if self.__notar_enabled:
             self.__notary = Codenotary(
-                self.__config.cas_api_key,
-                self.__config.cas_signer_id,
+                vcn_lc_api_key=self.__config.vcn_lc_api_key,
+                vcn_lc_host=self.__config.vcn_lc_host,
+                vcn_lc_port=self.__config.vcn_lc_port,
+                vcn_binary_path=self.__config.vcn_binary_path,
             )
         self.__session = self.__generate_request_session()
 
