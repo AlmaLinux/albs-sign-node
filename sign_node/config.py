@@ -12,8 +12,8 @@ from .utils.file_utils import normalize_path
 __all__ = ["SignNodeConfig"]
 
 
-DEFAULT_MASTER_URL = "http://web_server:8000/api/v1/"
-DEFAULT_WS_MASTER_URL = "ws://web_server:8000/api/v1/"
+DEFAULT_MASTER_URL = 'http://web_server:8000/api/v1/'
+DEFAULT_WS_MASTER_URL = 'ws://web_server:8000/api/v1/'
 DEFAULT_PULP_HOST = "http://pulp"
 DEFAULT_PULP_USER = "pulp"
 DEFAULT_PULP_PASSWORD = "test_pwd"
@@ -53,13 +53,11 @@ class SignNodeConfig(BaseConfig):
             "pulp_chunk_size": DEFAULT_PULP_CHUNK_SIZE,
             "parallel_upload_file_size": DEFAULT_PARALLEL_FILE_UPLOAD_SIZE,
             "dev_pgp_key_password": DEFAULT_PGP_PASSWORD,
-            "sentry_dsn": DEFAULT_SENTRY_DSN,
-            "sentry_environment": DEFAULT_SENTRY_ENVIRONMENT,
-            "sentry_traces_sample_rate": DEFAULT_SENTRY_TRACES_SAMPLE_RATE,
-            "vcn_lc_api_key": None,
-            "vcn_lc_host": None,
-            "vcn_lc_port": 443,
-            "vcn_binary_path": "/sign-node/",
+            'sentry_dsn': DEFAULT_SENTRY_DSN,
+            'sentry_environment': DEFAULT_SENTRY_ENVIRONMENT,
+            'sentry_traces_sample_rate': DEFAULT_SENTRY_TRACES_SAMPLE_RATE,
+            "cas_api_key": DEFAULT_CAS_API_KEY,
+            "cas_signer_id": DEFAULT_CAS_SIGNER_ID,
         }
         schema = {
             "development_mode": {"type": "boolean", "default": False},
@@ -71,36 +69,25 @@ class SignNodeConfig(BaseConfig):
             "node_id": {"type": "string", "required": True},
             "master_url": {"type": "string", "required": True},
             "ws_master_url": {"type": "string", "required": True},
-            "working_dir": {
-                "type": "string",
-                "required": True,
-                "coerce": normalize_path,
-            },
+            "working_dir": {"type": "string", "required": True,
+                            "coerce": normalize_path},
             "pulp_host": {"type": "string", "nullable": False},
             "pulp_user": {"type": "string", "nullable": False},
             "pulp_password": {"type": "string", "nullable": False},
             "pulp_chunk_size": {"type": "integer", "nullable": False},
-            "parallel_upload_file_size": {
-                "type": "integer",
-                "nullable": False,
-            },
+            "parallel_upload_file_size": {"type": "integer", "nullable": False},
             "jwt_token": {"type": "string", "nullable": True},
             "dev_pgp_key_password": {"type": "string", "nullable": False},
             "sentry_dsn": {"type": "string", "nullable": True},
             "sentry_environment": {"type": "string", "nullable": True},
             "sentry_traces_sample_rate": {"type": "float", "nullable": True},
-            "vcn_lc_api_key": {"type": "string", "nullable": True},
-            "vcn_lc_host": {"type": "string", "nullable": True},
-            "vcn_lc_port": {"type": "integer", "nullable": True},
-            "vcn_binary_path": {"type": "string", "nullable": True},
+            "cas_api_key": {"type": "string", "nullable": True},
+            "cas_signer_id": {"type": "string", "nullable": True},
         }
         super(SignNodeConfig, self).__init__(
-            default_config,
-            config_file,
-            schema,
-            **cmd_args,
+            default_config, config_file, schema, **cmd_args
         )
 
     @property
     def codenotary_enabled(self) -> bool:
-        return bool(self.vcn_lc_api_key) and bool(self.vcn_lc_host)
+        return bool(self.cas_api_key)
