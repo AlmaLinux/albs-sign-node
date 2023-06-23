@@ -16,8 +16,13 @@ import tempfile
 import typing
 import urllib.parse
 from collections import defaultdict
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import (
+    ThreadPoolExecutor,
+    as_completed,
+    )
 from datetime import datetime
+from pathlib import Path
+
 from urllib3 import Retry
 
 import websocket
@@ -29,15 +34,27 @@ import rpm
 import pgpy
 
 from sign_node.errors import SignError
-from sign_node.utils.file_utils import download_file, hash_file, safe_mkdir
+from sign_node.utils.file_utils import (
+    download_file,
+    hash_file,
+    safe_mkdir,
+)
 from sign_node.utils.codenotary import Codenotary
 from sign_node.uploaders.pulp import PulpRpmUploader
-from sign_node.package_sign import (
-    sign_dsc_package, sign_deb_package, sign_rpm_package
+from sign_node.package_sign import sign_rpm_package
+
+
+__all__ = ['Signer']
+
+gpg_scenario_template = (
+    '%no-protection\n'
+    'Key-Type: RSA\n'
+    'Key-Length: 2048\n'
+    'Subkey-Type: default\n'
+    'Subkey-Length: 2048\n'
+    'Name-Real: {sign_key_uid}\n'
+    'Expire-Date: 0\n'
 )
-
-
-__all__ = ["Signer"]
 
 
 class SignStatusEnum(enum.IntEnum):
@@ -58,12 +75,13 @@ class Signer(object):
             self.__config.pulp_password,
             self.__config.pulp_chunk_size,
         )
+        self.__working_dir_path = Path(self.__config.working_dir)
         self.__download_credentials = {
-            "login": config.node_id,
-            "password": config.jwt_token,
+            'login': config.node_id,
+            'password': config.jwt_token,
         }
         if config.development_mode:
-            self.__download_credentials["no_ssl_verify"] = True
+            self.__download_credentials['no_ssl_verify'] = True
         self.__notar_enabled = self.__config.codenotary_enabled
         if self.__notar_enabled:
             self.__notary = Codenotary(
@@ -102,8 +120,8 @@ class Signer(object):
                     }
                 )
                 queue.run_forever(ping_interval=60)
-            except Exception:
-                logging.exception('Sync queue recieved exception:')
+            except Exception as err:
+                logging.exception('Sync queue received exception "%s"', err)
 
     def on_sync_request(self, queue, message):
         answer = {}
@@ -114,61 +132,124 @@ class Signer(object):
             )
             sig_type = defaultdict(
                 lambda: '--detach-sign',
-                **{'clear-sign': '--clear-sign',
-                   'detach-sign': '--detach-sign'})
+                **{
+                    'clear-sign': '--clear-sign',
+                    'detach-sign': '--detach-sign',
+                }
+            )
             with tempfile.NamedTemporaryFile(mode='w') as fd:
-                asc_file_name = f'{fd.name}.asc'
+                asc_file_name = Path(fd.name).with_suffix('.asc')
                 fd.write(payload['content'])
                 fd.flush()
                 sign_cmd = plumbum.local['gpg'][
-                    '--yes', sig_type[payload.get('sig_type', 'detach-sign')],
-                    '--armor', '--default-key', payload['key_id'], fd.name
+                    '--yes',
+                    sig_type[payload.get('sig_type')],
+                    '--armor',
+                    '--default-key',
+                    payload['key_id'],
+                    fd.name,
                 ]
                 out, status = pexpect.run(
                     command=' '.join(sign_cmd.formulate()),
-                    events={"Enter passphrase:.*": "{0}\r".format(password)},
-                    env={"LC_ALL": "en_US.UTF-8"},
+                    events={'Enter passphrase:.*': '{0}\r'.format(password)},
+                    env={'LC_ALL': 'en_US.UTF-8'},
                     timeout=1200,
                     withexitstatus=1,
                 )
                 if status != 0:
-                    message = f'gpg failed to sign file, error: {out}'
-                    logging.error(message)
-                    raise Exception(message)
-                answer['asc_content'] = open(asc_file_name, 'r').read()
-                if os.path.exists(asc_file_name):
-                    os.unlink(asc_file_name)
-        except Exception:
+                    message = 'gpg failed to sign file, error: %s'
+                    logging.error(message, out)
+                    raise Exception(message % out)
+                with asc_file_name.open(mode='r') as asc_fd:
+                    answer['asc_content'] = asc_fd.read()
+                asc_file_name.unlink(missing_ok=True)
+        except Exception as err:
+            logging.exception(
+                'Can\'t process request from web server because "%s"',
+                err,
+            )
             answer['error'] = traceback.format_exc()
         queue.send(json.dumps(answer))
 
+    @staticmethod
+    def _generate_key_uid(task: typing.Dict):
+        return (
+            f"{task['user_name']}/{task['product_name']} "
+            f"ALBS community repo <{task['user_email']}>"
+        )
+
+    def report_signed_build_error(self, task: typing.Dict, msg: str):
+        response_payload = {
+            'build_id': task['build_id'],
+            'success': False,
+            'error_message': msg,
+        }
+        self._report_signed_build(task['id'], response_payload)
+
+    def report_generate_sign_key_error(self, task: typing.Dict, msg: str):
+        sign_key_name = self._generate_key_uid(task)
+        response_payload = {
+            'key_name': sign_key_name,
+            'success': False,
+            'error_message': msg,
+        }
+        self._report_generated_sign_key(
+            task['id'],
+            response_payload
+        )
+
     def sign_loop(self):
         while True:
-            task = None
+            sign_task = None
+            gen_sign_key_task = None
             try:
-                task = self._request_task()
-            except Exception:
-                logging.exception('Can\'t recieve new task from web server')
-            if not task:
-                logging.debug("There is no task to sign")
+                sign_task = self._request_sign_task()
+                gen_sign_key_task = self._request_gen_sign_key_task()
+            except Exception as err:
+                logging.exception(
+                    'Can\'t receive new task from web server because "%s"',
+                    err,
+                )
+            if not sign_task and not gen_sign_key_task:
+                logging.debug('There is no task to process')
                 time.sleep(30)
                 continue
-            logging.info(
-                "Signing the following task:\n%s", pprint.pformat(task)
-            )
-            try:
-                self._sign_build(task)
-                logging.info("the %s task is signed", task["id"])
-            except Exception as e:
-                msg = (
-                    f'Signing failed: {e}.\n'
-                    f'Traceback: {traceback.format_exc()}'
+            for task, processing_method, report_error_method in (
+                (
+                        sign_task,
+                        self._sign_build,
+                        self.report_signed_build_error,
+                ),
+                (
+                        gen_sign_key_task,
+                        self.generate_sign_key,
+                        self.report_generate_sign_key_error,
+                ),
+            ):
+                if not task:
+                    continue
+                logging.info(
+                    'Processing the following task:\n%s',
+                    pprint.pformat(task)
                 )
-                logging.error(msg)
-                response_payload = {'build_id': task['build_id'],
-                                    'success': False, 'error_message': msg}
-                self._report_signed_build(task['id'], response_payload)
-                continue
+                task_id = task['id']
+                try:
+                    processing_method(task)
+                    logging.info('The task "%s" is processed', task_id)
+                except Exception as err:
+                    logging.exception(
+                        'Can\'t process task from web server because "%s"',
+                        err,
+                    )
+                    msg = (
+                        f'Processing failed: {err}.\n'
+                        f'Traceback: {traceback.format_exc()}'
+                    )
+                    report_error_method(
+                        task=task,
+                        msg=msg
+                    )
+                    continue
 
     def _check_signature(self, files, key_id):
         errors = []
@@ -222,6 +303,125 @@ class Signer(object):
     def timedelta_seconds(start_time: datetime, finish_time: datetime) -> int:
         return int((finish_time - start_time).total_seconds())
 
+    @staticmethod
+    def _write_file_content(path: Path, content, mode='w'):
+        with path.open(mode=mode) as fd:
+            fd.write(content)
+
+    @staticmethod
+    def _extract_key_fingerprint(keyid: str) -> str:
+        fingerprint_cmd = plumbum.local['gpg'][
+            '-k',
+            keyid,
+        ]
+        _, stdout, _ = fingerprint_cmd.run()
+
+        key_fingerprint = stdout.split('\n')[1].strip()
+        return key_fingerprint
+
+    def _export_key(
+            self,
+            fingerprint: str,
+            backup_dir: Path,
+            is_public_key: bool,
+    ) -> str:
+        key_type = 'public' if is_public_key else 'private'
+        key_file_name = f'{fingerprint}_{key_type}'
+        key_path = backup_dir.joinpath(key_file_name)
+        export_key_cmd = plumbum.local['gpg'][
+            '-a',
+            '--batch',
+            '--export' if is_public_key else '--export-secret-keys',
+            fingerprint,
+        ]
+        logging.info(
+            'Export %s PGP key for fingerprint: %s',
+            key_type,
+            fingerprint,
+        )
+        _, stdout, _ = export_key_cmd.run()
+        self._write_file_content(
+            path=key_path,
+            content=stdout,
+        )
+        return key_file_name
+
+    def _generate_sign_key(
+            self,
+            sign_key_uid: str,
+            task_dir: Path,
+    ) -> typing.Tuple[str, str]:
+        gpg_scenario = gpg_scenario_template.format(sign_key_uid=sign_key_uid)
+        scenario_path = task_dir.joinpath('gpg-scenario')
+        self._write_file_content(
+            path=scenario_path,
+            content=gpg_scenario,
+        )
+        generate_sign_key_cmd = plumbum.local['gpg'][
+            '--batch',
+            '--gen-key',
+            scenario_path,
+        ]
+        logging.info('Generate PGP key for UID: %s', sign_key_uid)
+        _, _, stderr = generate_sign_key_cmd.run()
+        # the needed string looks like
+        # 'gpg: key 29237BFE7EBF38BE marked as ultimately trusted'
+        keyid = stderr.split('\n')[0].split('gpg: key ')[1].split(' ')[0]
+        fingerprint = self._extract_key_fingerprint(keyid=keyid)
+        return keyid, fingerprint
+
+    def generate_sign_key(self, task):
+        task_id = task['id']
+        sign_key_uid = self._generate_key_uid(task)
+        task_dir = self.__working_dir_path.joinpath(f'gen_key_{task_id}')
+        backup_dir = self.__working_dir_path.joinpath('community_keys_backups')
+        task_dir.mkdir(parents=True, exist_ok=True)
+        backup_dir.mkdir(parents=True, exist_ok=True)
+
+        key_id, fingerprint = self._generate_sign_key(
+            sign_key_uid=sign_key_uid,
+            task_dir=task_dir,
+        )
+        public_key_file_name = self._export_key(
+            fingerprint=fingerprint,
+            backup_dir=task_dir,
+            is_public_key=True,
+        )
+        self._export_key(
+            fingerprint=fingerprint,
+            backup_dir=backup_dir,
+            is_public_key=False,
+        )
+        public_key_file_path = os.path.join(
+            task_dir,
+            public_key_file_name,
+        )
+        logging.info(
+            'Upload public PGP key for UID "%s" to Pulp',
+            sign_key_uid,
+        )
+        artifact = self.__pulp_uploader.upload_single_file(
+            filename=public_key_file_path,
+            artifact_type='public_pgp_key',
+        )
+        response_payload = {
+            'success': True,
+            'error_message': '',
+            'sign_key_href': artifact.href,
+            'key_name': sign_key_uid,
+            'key_id': key_id,
+            'fingerprint': fingerprint,
+            'file_name': public_key_file_name,
+        }
+        logging.info(
+            'Response payload "%s"',
+            response_payload,
+        )
+        self._report_generated_sign_key(
+            task_id=task_id,
+            response_payload=response_payload,
+        )
+
     def _sign_build(self, task):
         """
         Signs packages from the specified task and uploads them to the server.
@@ -234,29 +434,29 @@ class Signer(object):
 
         def download_package(pkg: dict):
             verification = None
-            package_type = package.get("type", "rpm")
-            if package_type in ("deb", "dsc"):
+            package_type = package.get('type', 'rpm')
+            if package_type in ('deb', 'dsc'):
                 download_dir = debs_dir
             else:
                 download_dir = rpms_dir
             pkg_path = self._download_package(download_dir, pkg)
-            if self.__notar_enabled and pkg.get("cas_hash"):
+            if self.__notar_enabled and pkg.get('cas_hash'):
                 verification = self.__notary.verify_artifact(pkg_path)
                 if not verification:
                     raise SignError(
                         f'Package {pkg} cannot be verified by codenotary'
                     )
 
-            return pkg, (pkg["id"], pkg["name"], pkg_path, verification)
+            return pkg, (pkg['id'], pkg['name'], pkg_path, verification)
 
         stats = {}
-        stats["sign_task_start_time"] = str(datetime.utcnow())
-        pgp_keyid = task["keyid"]
+        stats['sign_task_start_time'] = str(datetime.utcnow())
+        pgp_keyid = task['keyid']
         pgp_key_password = self.__password_db.get_password(pgp_keyid)
         fingerprint = self.__password_db.get_fingerprint(pgp_keyid)
-        task_dir = os.path.join(self.__config.working_dir, str(task["id"]))
-        rpms_dir = os.path.join(task_dir, "rpms")
-        debs_dir = os.path.join(task_dir, "debs")
+        task_dir = self.__working_dir_path.joinpath(str(task['id']))
+        rpms_dir = task_dir.joinpath('rpms')
+        debs_dir = task_dir.joinpath('debs')
         downloaded = []
         has_rpms = False
         response_payload = {'build_id': task['build_id'], 'success': True}
@@ -264,8 +464,8 @@ class Signer(object):
         start_time = datetime.utcnow()
 
         # Detect if there are some RPMs in the payload
-        for package in task["packages"]:
-            package_type = package.get("type", "rpm")
+        for package in task['packages']:
+            package_type = package.get('type', 'rpm')
             if package_type == 'rpm':
                 has_rpms = True
                 break
@@ -382,7 +582,7 @@ class Signer(object):
         finally:
             logging.info('Response payload:')
             logging.info(response_payload)
-            self._report_signed_build(task["id"], response_payload)
+            self._report_signed_build(task['id'], response_payload)
             if os.path.exists(task_dir):
                 shutil.rmtree(task_dir)
 
@@ -397,20 +597,43 @@ class Signer(object):
         """
         response = self.__call_master(f'{task_id}/complete',
                                       **response_payload)
-        if not response["success"]:
+        if not response['success']:
             raise Exception(
-                "Server side error: {0}".format(response.get("error", "unknown"))
+                'Server side error: {0}'.format(
+                    response.get('error', 'unknown')
+                )
+            )
+
+    def _report_generated_sign_key(self, task_id, response_payload):
+        """
+        Reports generating of a sign key completion to the master.
+
+        Parameters
+        ----------
+        task_id : str
+            Generating sign key task identifier.
+        """
+        response = self.__call_master(
+            f'community/{task_id}/complete',
+            **response_payload
+        )
+        if not response['success']:
+            raise Exception(
+                'Server side error: {0}'.format(
+                    response.get('error', 'unknown')
+                )
             )
 
     def _upload_artifact(self, file_path):
         artifacts_dir = os.path.dirname(file_path)
         logging.info('Artifacts dir: %s', artifacts_dir)
         logging.info(
-            "Uploading %s signed package", os.path.basename(file_path)
+            'Uploading %s signed package', os.path.basename(file_path)
         )
         return self.__pulp_uploader.upload_single_file(file_path)
 
-    def _download_package(self, download_dir, package, try_count=3):
+    @staticmethod
+    def _download_package(download_dir, package, try_count=3):
         """
         Downloads the specified package from the Build System server and checks
         the download file checksum.
@@ -434,29 +657,29 @@ class Signer(object):
         castor.errors.ConnectionError
             If the package download is failed.
         """
-        package_dir = os.path.join(download_dir, str(package["id"]))
+        package_dir = os.path.join(download_dir, str(package['id']))
         safe_mkdir(package_dir)
-        package_path = os.path.join(package_dir, package["name"])
-        download_url = package["download_url"]
+        package_path = os.path.join(package_dir, package['name'])
+        download_url = package['download_url']
         last_exc = None
         for i in range(1, try_count + 1):
-            logging.debug("Downloading %s %d/%d", download_url, i, try_count)
+            logging.debug('Downloading %s %d/%d', download_url, i, try_count)
             try:
                 download_file(download_url, package_path)
                 # FIXME: check checksum later
-                # checksum = hash_file(package_path, get_hasher("sha256"))
-                # if checksum != package["checksum"]:
-                #     raise ValueError(f"Checksum does not match for {download_url}.")
+                # checksum = hash_file(package_path, get_hasher('sha256'))
+                # if checksum != package['checksum']:
+                #     raise ValueError(f'Checksum does not match for {download_url}.')
                 return package_path
             except Exception as e:
                 last_exc = e
                 logging.error(
-                    "Cannot download %s: %s.\nTraceback:\n%s",
+                    'Cannot download %s: %s.\nTraceback:\n%s',
                     download_url, str(e), traceback.format_exc()
                 )
         raise last_exc
 
-    def _request_task(self):
+    def _request_sign_task(self) -> typing.Dict:
         """
         Requests a new signing task from the master.
 
@@ -467,13 +690,25 @@ class Signer(object):
         """
         pgp_keyids = self.__config.pgp_keys
         response = self.__call_master(
-            "get_sign_task", key_ids=pgp_keyids
+            'get_sign_task', key_ids=pgp_keyids
         )
+        return response
+
+    def _request_gen_sign_key_task(self) -> typing.Dict:
+        """
+        Requests a new generating sign key task from the master
+
+        Returns
+        -------
+        dict or None
+            Task to process or None if master didn't return a task.
+        """
+        response = self.__call_master('community/get_gen_sign_key_task')
         return response
 
     def __call_master(self, endpoint, **parameters):
         full_url = urllib.parse.urljoin(
-            self.__config.master_url, f"sign-tasks/{endpoint}/"
+            self.__config.master_url, f'sign-tasks/{endpoint}/'
         )
         response = self.__session.post(full_url, json=parameters, timeout=10)
         response.raise_for_status()
