@@ -414,7 +414,6 @@ class Signer(object):
             'key_id': key_id,
             'fingerprint': fingerprint,
             'file_name': public_key_file_name,
-            'platform_id': task['platform_id'],
         }
         logging.info(
             'Response payload "%s"',
