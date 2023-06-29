@@ -49,9 +49,9 @@ __all__ = ['Signer']
 gpg_scenario_template = (
     '%no-protection\n'
     'Key-Type: RSA\n'
-    'Key-Length: 2048\n'
+    'Key-Length: 4096\n'
     'Subkey-Type: default\n'
-    'Subkey-Length: 2048\n'
+    'Subkey-Length: 4096\n'
     'Name-Real: {sign_key_uid}\n'
     'Expire-Date: 0\n'
 )
