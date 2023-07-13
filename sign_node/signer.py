@@ -333,7 +333,7 @@ class Signer(object):
             is_public_key: bool,
     ) -> str:
         key_type = 'public' if is_public_key else 'private'
-        key_file_name = f'{fingerprint}_{key_type}'
+        key_file_name = f'{fingerprint}_{key_type}.key'
         key_path = backup_dir.joinpath(key_file_name)
         export_key_cmd = plumbum.local['gpg'][
             '-a',
@@ -399,16 +399,13 @@ class Signer(object):
             backup_dir=backup_dir,
             is_public_key=False,
         )
-        public_key_file_path = os.path.join(
-            task_dir,
-            public_key_file_name,
-        )
+        public_key_file_path = task_dir.joinpath(public_key_file_name)
         logging.info(
             'Upload public PGP key for UID "%s" to Pulp',
             sign_key_uid,
         )
         artifact = self.__pulp_uploader.upload_single_file(
-            filename=public_key_file_path,
+            filename=str(public_key_file_path),
             artifact_type='public_pgp_key',
         )
         response_payload = {
