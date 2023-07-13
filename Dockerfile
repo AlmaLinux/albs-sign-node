@@ -7,7 +7,7 @@ RUN dnf install -y epel-release && \
     dnf upgrade -y && \
     dnf install -y --enablerepo="powertools" --enablerepo="epel" --enablerepo="signnode" --enablerepo="codenotary-repo" \
         rpm-sign python3 python3-devel python3-virtualenv git \
-        python3-pycurl tree mlocate keyrings-filesystem pinentry \
+        python3-pycurl tree mlocate keyrings-filesystem pinentry sudo \
         ubu-keyring debian-keyring raspbian-keyring cas strace procps-ng && \
     dnf clean all
 
