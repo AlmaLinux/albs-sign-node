@@ -193,6 +193,7 @@ class Signer(object):
             'success': False,
             'error_message': msg,
         }
+        logging.debug('Test debug message 2')
         self._report_generated_sign_key(
             task['id'],
             response_payload
@@ -241,6 +242,7 @@ class Signer(object):
                         'Can\'t process task from web server because "%s"',
                         err,
                     )
+                    logging.debug('Test debug message')
                     msg = (
                         f'Processing failed: {err}.\n'
                         f'Traceback: {traceback.format_exc()}'
@@ -249,7 +251,6 @@ class Signer(object):
                         task=task,
                         msg=msg
                     )
-                    continue
 
     def _check_signature(self, files, key_id):
         errors = []
