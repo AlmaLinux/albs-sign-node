@@ -8,7 +8,7 @@ RUN dnf install -y epel-release && \
     dnf install -y --enablerepo="powertools" --enablerepo="epel" --enablerepo="signnode" --enablerepo="codenotary-repo" \
         rpm-sign python3 python3-devel python3-virtualenv git \
         python3-pycurl tree mlocate keyrings-filesystem pinentry \
-        ubu-keyring debian-keyring raspbian-keyring cas && \
+        ubu-keyring debian-keyring raspbian-keyring cas strace procps-ng && \
     dnf clean all
 
 RUN curl https://raw.githubusercontent.com/vishnubob/wait-for-it/master/wait-for-it.sh -o wait_for_it.sh && chmod +x wait_for_it.sh

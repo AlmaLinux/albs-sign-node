@@ -618,7 +618,7 @@ class Signer(object):
             f'community/{task_id}/complete',
             **response_payload
         )
-        if not response['success']:
+        if not response and 'success' not in response and not response['success']:
             raise Exception(
                 'Server side error: {0}'.format(
                     response.get('error', 'unknown')
@@ -712,5 +712,6 @@ class Signer(object):
             self.__config.master_url, f'sign-tasks/{endpoint}/'
         )
         response = self.__session.post(full_url, json=parameters, timeout=30)
+        logging.info(response)
         response.raise_for_status()
         return response.json()
