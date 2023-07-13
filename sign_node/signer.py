@@ -238,7 +238,7 @@ class Signer(object):
                     processing_method(task)
                     logging.info('The task "%s" is processed', task_id)
                 except Exception as err:
-                    logging.exception(
+                    logging.error(
                         'Can\'t process task from web server because "%s"',
                         err,
                     )
