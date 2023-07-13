@@ -238,7 +238,7 @@ class Signer(object):
                     processing_method(task)
                     logging.info('The task "%s" is processed', task_id)
                 except Exception as err:
-                    logging.error(
+                    logging.exception(
                         'Can\'t process task from web server because "%s"',
                         err,
                     )
@@ -247,10 +247,16 @@ class Signer(object):
                         f'Processing failed: {err}.\n'
                         f'Traceback: {traceback.format_exc()}'
                     )
-                    report_error_method(
-                        task=task,
-                        msg=msg
-                    )
+                    try:
+                        report_error_method(
+                            task=task,
+                            msg=msg
+                        )
+                    except requests.RequestException as err:
+                        logging.exception(
+                            'Wrong answer from a web server: "%s"',
+                            err,
+                        )
 
     def _check_signature(self, files, key_id):
         errors = []
@@ -712,6 +718,5 @@ class Signer(object):
             self.__config.master_url, f'sign-tasks/{endpoint}/'
         )
         response = self.__session.post(full_url, json=parameters, timeout=30)
-        logging.info(response)
         response.raise_for_status()
         return response.json()
