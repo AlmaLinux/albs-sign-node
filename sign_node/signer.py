@@ -193,7 +193,7 @@ class Signer(object):
             'success': False,
             'error_message': msg,
         }
-        logging.debug('Test debug message 2')
+        logging.info('Test debug message 2')
         self._report_generated_sign_key(
             task['id'],
             response_payload
@@ -242,7 +242,7 @@ class Signer(object):
                         'Can\'t process task from web server because "%s"',
                         err,
                     )
-                    logging.debug('Test debug message')
+                    logging.info('Test debug message')
                     msg = (
                         f'Processing failed: {err}.\n'
                         f'Traceback: {traceback.format_exc()}'
@@ -711,6 +711,6 @@ class Signer(object):
         full_url = urllib.parse.urljoin(
             self.__config.master_url, f'sign-tasks/{endpoint}/'
         )
-        response = self.__session.post(full_url, json=parameters, timeout=10)
+        response = self.__session.post(full_url, json=parameters, timeout=30)
         response.raise_for_status()
         return response.json()
