@@ -25,9 +25,6 @@ COPY requirements.txt /sign-node/requirements.txt
 RUN python3 -m venv --system-site-packages env
 RUN /sign-node/env/bin/pip install --upgrade pip==21.1 && /sign-node/env/bin/pip install -r requirements.txt && /sign-node/env/bin/pip cache purge
 
-COPY ./sign_node /sign-node/sign_node
-COPY almalinux_sign_node.py /sign-node/almalinux_sign_node.py
-
 RUN chown -R alt:alt /sign-node /wait_for_it.sh /srv
 USER alt
 
