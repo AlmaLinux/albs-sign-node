@@ -27,6 +27,16 @@ DEFAULT_SENTRY_TRACES_SAMPLE_RATE = 0.2
 DEFAULT_CAS_API_KEY = None
 DEFAULT_CAS_SIGNER_ID = None
 
+GPG_SCENARIO_TEMPLATE = (
+    '%no-protection\n'
+    'Key-Type: RSA\n'
+    'Key-Length: 4096\n'
+    'Subkey-Type: default\n'
+    'Subkey-Length: 4096\n'
+    'Name-Real: {sign_key_uid}\n'
+    'Expire-Date: 0\n'
+)
+
 
 class SignNodeConfig(BaseConfig):
     def __init__(self, config_file=None, **cmd_args):

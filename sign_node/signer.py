@@ -19,7 +19,7 @@ from collections import defaultdict
 from concurrent.futures import (
     ThreadPoolExecutor,
     as_completed,
-    )
+)
 from datetime import datetime
 from pathlib import Path
 
@@ -33,6 +33,7 @@ import pexpect
 import rpm
 import pgpy
 
+from sign_node.config import GPG_SCENARIO_TEMPLATE
 from sign_node.errors import SignError
 from sign_node.utils.file_utils import (
     download_file,
@@ -45,16 +46,6 @@ from sign_node.package_sign import sign_rpm_package
 
 
 __all__ = ['Signer']
-
-gpg_scenario_template = (
-    '%no-protection\n'
-    'Key-Type: RSA\n'
-    'Key-Length: 4096\n'
-    'Subkey-Type: default\n'
-    'Subkey-Length: 4096\n'
-    'Name-Real: {sign_key_uid}\n'
-    'Expire-Date: 0\n'
-)
 
 
 class SignStatusEnum(enum.IntEnum):
@@ -137,13 +128,13 @@ class Signer(object):
                     'detach-sign': '--detach-sign',
                 }
             )
-            with tempfile.NamedTemporaryFile(mode='w') as fd:
-                asc_file_name = Path(fd.name).with_suffix('.asc')
+            with tempfile.NamedTemporaryFile(mode='w', suffix='.asc') as fd:
+                asc_file_name = Path(fd.name)
                 fd.write(payload['content'])
                 fd.flush()
                 sign_cmd = plumbum.local['gpg'][
                     '--yes',
-                    sig_type[payload.get('sig_type')],
+                    sig_type[payload.get('sig_type', 'detach-sign')],
                     '--armor',
                     '--default-key',
                     payload['key_id'],
@@ -193,7 +184,6 @@ class Signer(object):
             'success': False,
             'error_message': msg,
         }
-        logging.info('Test debug message 2')
         self._report_generated_sign_key(
             task['id'],
             response_payload
@@ -242,7 +232,6 @@ class Signer(object):
                         'Can\'t process task from web server because "%s"',
                         err,
                     )
-                    logging.info('Test debug message')
                     msg = (
                         f'Processing failed: {err}.\n'
                         f'Traceback: {traceback.format_exc()}'
@@ -322,7 +311,15 @@ class Signer(object):
             keyid,
         ]
         _, stdout, _ = fingerprint_cmd.run()
-
+        # the sample of GPG output
+        # [root@almalinux_8_x86_64 /]# gpg -k packager@almalinux.org
+        # pub   rsa4096 2021-01-12 [C] [expires: 2024-01-12]
+        #       5E9B8F5617B5066CE92057C3488FCF7C3ABB34F8
+        # uid           [ unknown] AlmaLinux <packager@almalinux.org>
+        # sub   rsa3072 2021-01-12 [S] [expires: 2024-01-12]
+        #
+        # [root@almalinux_8_x86_64 /]#
+        # the second line is a full key fingerprint
         key_fingerprint = stdout.split('\n')[1].strip()
         return key_fingerprint
 
@@ -358,7 +355,7 @@ class Signer(object):
             sign_key_uid: str,
             task_dir: Path,
     ) -> typing.Tuple[str, str]:
-        gpg_scenario = gpg_scenario_template.format(sign_key_uid=sign_key_uid)
+        gpg_scenario = GPG_SCENARIO_TEMPLATE.format(sign_key_uid=sign_key_uid)
         scenario_path = task_dir.joinpath('gpg-scenario')
         self._write_file_content(
             path=scenario_path,
