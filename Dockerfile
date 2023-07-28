@@ -23,7 +23,7 @@ WORKDIR /sign-node
 COPY requirements.txt /sign-node/requirements.txt
 
 RUN python3 -m venv --system-site-packages env
-RUN cd /sign-node && source /sign-node/env/bin/activate && pip3 install --upgrade pip && pip3 install -r /sign-node/requirements.txt --no-cache-dir
+RUN cd /sign-node && source env/bin/activate && pip3 install --upgrade pip && pip3 install -r requirements.txt --no-cache-dir
 
 RUN chown -R alt:alt /sign-node /wait_for_it.sh /srv
 USER alt
