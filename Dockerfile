@@ -23,9 +23,9 @@ WORKDIR /sign-node
 COPY requirements.txt /sign-node/requirements.txt
 
 RUN python3 -m venv --system-site-packages env
-RUN /sign-node/env/bin/pip install --upgrade pip==21.1 && /sign-node/env/bin/pip install -r requirements.txt && /sign-node/env/bin/pip cache purge
+RUN cd /sign-node && source /sign-node/env/bin/activate && pip3 install --upgrade pip && pip3 install -r /sign-node/requirements.txt --no-cache-dir
 
 RUN chown -R alt:alt /sign-node /wait_for_it.sh /srv
 USER alt
 
-CMD ["/sign-node/env/bin/python", "/sign-node/almalinux_sign_node.py"]
+CMD ["/bin/bash", "-c", "source env/bin/activate && pip3 install --upgrade pip && pip3 install -r requirements.txt --no-cache-dir && python3 almalinux_sign_node.py"]
