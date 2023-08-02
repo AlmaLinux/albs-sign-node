@@ -238,15 +238,13 @@ def sign_rpm_package(path, keyid, password):
     PackageSignError
         If an error occurred.
     """
-    cmd = """/bin/bash -c \"rpmsign --resign -D '_gpg_name {0}' {1}\"""".format(
-        keyid, path
-    )
+    cmd = f"""/bin/bash -c \"rpmsign --rpmv3 --resign -D '_gpg_name {keyid}' {path}\""""
     out, status = pexpect.run(
         command=cmd,
-        events={"Enter passphrase:.*": "{0}\r".format(password)},
+        events={"Enter passphrase:.*": f"{password}\r"},
         env={"LC_ALL": "en_US.UTF-8"},
         timeout=100000,
-        withexitstatus=1,
+        withexitstatus=True,
     )
     if status is None:
         message = (
@@ -262,6 +260,6 @@ def sign_rpm_package(path, keyid, password):
             status, cmd, out, traceback.format_exc()
         )
         raise PackageSignError(
-            "RPM sign failed with {0} exit code.\n"
-            "Traceback: {1}".format(status, traceback.format_exc())
+            f"RPM sign failed with {status} exit code.\n"
+            f"Traceback: {traceback.format_exc()}"
         )
