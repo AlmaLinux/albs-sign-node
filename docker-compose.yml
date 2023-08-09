@@ -1,14 +1,14 @@
 version: "3.9"
 services:
   sign_node:
-    image: avoid/alss-node
+    image: quay.io/almalinuxorg/albs-sign-node:latest
     privileged: true
-    build:
-      dockerfile: Dockerfile
-      context: .
-    command: "bash -c 'source env/bin/activate && ./almalinux_sign_node.py -v'"
+    command: "bash -c 'source env/bin/activate && pip3 install --upgrade pip && pip3 install -r requirements.txt --no-cache-dir && python3 almalinux_sign_node.py -v'"
     restart: on-failure
     volumes:
       - "./node-config:/root/.config"
+      - "./almalinux_sign_node.py:/sign-node/almalinux_sign_node.py"
+      - "./sign_node:/sign-node/sign_node"
+      - "./requirements.txt:/sign-node/requirements.txt"
     extra_hosts:
      - "beta-build.cloudlinux.com:192.168.246.79"
