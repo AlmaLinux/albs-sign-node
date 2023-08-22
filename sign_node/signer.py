@@ -33,7 +33,7 @@ import pexpect
 import rpm
 import pgpy
 
-from sign_node.config import GPG_SCENARIO_TEMPLATE
+from sign_node.config import GPG_SCENARIO_TEMPLATE, COMMUNITY_KEY_SUFFIX
 from sign_node.errors import SignError
 from sign_node.utils.file_utils import (
     download_file,
@@ -166,7 +166,7 @@ class Signer(object):
     def _generate_key_uid(task: typing.Dict):
         return (
             f"{task['user_name']}/{task['product_name']} "
-            f"ALBS community repo <{task['user_email']}>"
+            f"{COMMUNITY_KEY_SUFFIX} <{task['user_email']}>"
         )
 
     def report_signed_build_error(self, task: typing.Dict, msg: str):

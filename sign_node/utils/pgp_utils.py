@@ -8,10 +8,12 @@
 import typing
 import getpass
 import datetime
+from collections import defaultdict
 
 import gnupg
 import plumbum
 
+from ..config import COMMUNITY_KEY_SUFFIX
 from ..errors import ConfigurationError
 
 
@@ -123,7 +125,7 @@ class PGPPasswordDB(object):
         key_ids_from_config : list of str
             List of PGP keyids from the config.
         """
-        self.__key_ids = None
+        self.__key_ids = defaultdict(dict)
         self.__key_ids_from_config = key_ids_from_config
         self.__gpg = gpg
         self.__is_community_sign_node = is_community_sign_node
@@ -136,16 +138,24 @@ class PGPPasswordDB(object):
 
     @property
     def key_ids(self):
-        self.__key_ids = {}
+        key_ids = self.__key_ids.copy()
+        if self.__development_mode:
+            password = self.__development_password
+        else:
+            password = ''
         if self.__is_community_sign_node:
-            self.__key_ids.update({
-                key['keyid']: {'password': ''}
+            key_ids.update({
+                key['keyid']: {
+                    'password': password,
+                    'fingerprint': key['fingerprint'],
+                    'subkeys': [
+                        subkey[0] for subkey in key.get('subkeys', [])
+                    ]
+                }
                 for key in self.__gpg.list_keys(True)
+                if any(COMMUNITY_KEY_SUFFIX in uid for uid in key['uids'])
             })
-        self.__key_ids.update({
-            keyid: {'password': ''} for keyid in self.__key_ids_from_config
-        })
-        return self.__key_ids
+        return key_ids
 
     def ask_for_passwords(self):
         """
@@ -159,7 +169,7 @@ class PGPPasswordDB(object):
         """
         existent_keys = {key["keyid"]: key
                          for key in self.__gpg.list_keys(True)}
-        for keyid in self.key_ids:
+        for keyid in self.__key_ids_from_config:
             key = existent_keys.get(keyid)
             if not key:
                 raise ConfigurationError(
@@ -175,9 +185,9 @@ class PGPPasswordDB(object):
                 raise ConfigurationError(
                     "PGP key {0} password is not valid".format(keyid)
                 )
-            self.key_ids[keyid]["password"] = password
-            self.key_ids[keyid]["fingerprint"] = key["fingerprint"]
-            self.key_ids[keyid]["subkeys"] = [
+            self.__key_ids[keyid]["password"] = password
+            self.__key_ids[keyid]["fingerprint"] = key["fingerprint"]
+            self.__key_ids[keyid]["subkeys"] = [
                 subkey[0] for subkey in key.get("subkeys", [])
             ]
 

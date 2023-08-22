@@ -27,6 +27,8 @@ DEFAULT_SENTRY_TRACES_SAMPLE_RATE = 0.2
 DEFAULT_CAS_API_KEY = None
 DEFAULT_CAS_SIGNER_ID = None
 
+COMMUNITY_KEY_SUFFIX = 'ALBS community repo'
+
 GPG_SCENARIO_TEMPLATE = (
     '%no-protection\n'
     'Key-Type: RSA\n'
