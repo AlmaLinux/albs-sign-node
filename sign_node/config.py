@@ -52,6 +52,7 @@ class SignNodeConfig(BaseConfig):
         """
         default_config = {
             "development_mode": False,
+            "is_community_sign_node": False,
             "pgp_keys": {},
             "master_url": DEFAULT_MASTER_URL,
             "ws_master_url": DEFAULT_WS_MASTER_URL,
@@ -71,6 +72,7 @@ class SignNodeConfig(BaseConfig):
         }
         schema = {
             "development_mode": {"type": "boolean", "default": False},
+            "is_community_sign_node": {"type": "boolean", "default": False},
             "pgp_keys": {
                 "type": "list",
                 "required": True,

@@ -44,7 +44,9 @@ def main():
     init_sentry(config)
     gpg = init_gpg()
     password_db = PGPPasswordDB(
-        gpg, config.pgp_keys.copy(),
+        gpg,
+        key_ids_from_config=config.pgp_keys.copy(),
+        is_community_sign_node=config.is_community_sign_node,
         development_mode=config.development_mode,
         development_password=config.dev_pgp_key_password
     )

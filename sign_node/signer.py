@@ -689,7 +689,7 @@ class Signer(object):
         dict or None
             Task to process or None if master didn't return a task.
         """
-        pgp_keyids = self.__config.pgp_keys
+        pgp_keyids = list(self.__password_db.key_ids.keys())
         response = self.__call_master(
             'get_sign_task', key_ids=pgp_keyids
         )
