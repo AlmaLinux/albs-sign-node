@@ -1,4 +1,4 @@
-FROM almalinux:9
+FROM almalinux:8
 
 COPY ./signnode.repo /etc/yum.repos.d/signnode.repo
 
