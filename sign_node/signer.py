@@ -33,7 +33,10 @@ import pexpect
 import rpm
 import pgpy
 
-from sign_node.config import GPG_SCENARIO_TEMPLATE, COMMUNITY_KEY_SUFFIX
+from sign_node.config import (
+    GPG_SCENARIO_TEMPLATE,
+    COMMUNITY_KEY_SUFFIX,
+)
 from sign_node.errors import SignError
 from sign_node.utils.file_utils import (
     download_file,
@@ -76,8 +79,11 @@ class Signer(object):
         self.__notar_enabled = self.__config.codenotary_enabled
         if self.__notar_enabled:
             self.__notary = Codenotary(
-                self.__config.cas_api_key,
-                self.__config.cas_signer_id,
+                immudb_username=self.__config.immudb_username,
+                immudb_password=self.__config.immudb_password,
+                immudb_database=self.__config.immudb_database,
+                immudb_address=self.__config.immudb_address,
+                immudb_public_key_file=self.__config.immudb_public_key_file,
             )
         self.__session = self.__generate_request_session()
 
@@ -272,7 +278,7 @@ class Signer(object):
                 sig = signature.signer.lower()
                 if sig == key_id_lower:
                     return SignStatusEnum.SUCCESS, ''
-                elif subkeys and sig in subkeys:
+                if subkeys and sig in subkeys:
                     return SignStatusEnum.SUCCESS, ''
 
             return SignStatusEnum.WRONG_SIGNATURE, sig

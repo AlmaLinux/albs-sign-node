@@ -24,8 +24,6 @@ DEFAULT_PGP_PASSWORD = "test_pwd"
 DEFAULT_SENTRY_DSN = ""
 DEFAULT_SENTRY_ENVIRONMENT = "dev"
 DEFAULT_SENTRY_TRACES_SAMPLE_RATE = 0.2
-DEFAULT_CAS_API_KEY = None
-DEFAULT_CAS_SIGNER_ID = None
 
 COMMUNITY_KEY_SUFFIX = 'ALBS community repo'
 
@@ -69,8 +67,11 @@ class SignNodeConfig(BaseConfig):
             'sentry_dsn': DEFAULT_SENTRY_DSN,
             'sentry_environment': DEFAULT_SENTRY_ENVIRONMENT,
             'sentry_traces_sample_rate': DEFAULT_SENTRY_TRACES_SAMPLE_RATE,
-            "cas_api_key": DEFAULT_CAS_API_KEY,
-            "cas_signer_id": DEFAULT_CAS_SIGNER_ID,
+            'immudb_username': None,
+            'immudb_password': None,
+            'immudb_database': None,
+            'immudb_address': None,
+            'immudb_public_key_file': None,
         }
         schema = {
             "development_mode": {"type": "boolean", "default": False},
@@ -95,8 +96,11 @@ class SignNodeConfig(BaseConfig):
             "sentry_dsn": {"type": "string", "nullable": True},
             "sentry_environment": {"type": "string", "nullable": True},
             "sentry_traces_sample_rate": {"type": "float", "nullable": True},
-            "cas_api_key": {"type": "string", "nullable": True},
-            "cas_signer_id": {"type": "string", "nullable": True},
+            'immudb_username': {'type': 'string', 'nullable': True},
+            'immudb_password': {'type': 'string', 'nullable': True},
+            'immudb_database': {'type': 'string', 'nullable': True},
+            'immudb_address': {'type': 'string', 'nullable': True},
+            'immudb_public_key_file': {'type': 'string', 'nullable': True},
         }
         super(SignNodeConfig, self).__init__(
             default_config, config_file, schema, **cmd_args
@@ -104,4 +108,4 @@ class SignNodeConfig(BaseConfig):
 
     @property
     def codenotary_enabled(self) -> bool:
-        return bool(self.cas_api_key)
+        return bool(self.immudb_username) and bool(self.immudb_password)
