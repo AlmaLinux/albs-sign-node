@@ -1,5 +1,5 @@
 plumbum==1.7.2
-requests==2.31.0
+requests==2.27.1
 filesplit==3.0.2
 pulpcore-client==3.16.0
 scikit_build==0.12.0
