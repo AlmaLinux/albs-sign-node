@@ -25,6 +25,18 @@ DEFAULT_SENTRY_DSN = ""
 DEFAULT_SENTRY_ENVIRONMENT = "dev"
 DEFAULT_SENTRY_TRACES_SAMPLE_RATE = 0.2
 
+COMMUNITY_KEY_SUFFIX = 'ALBS community repo'
+
+GPG_SCENARIO_TEMPLATE = (
+    '%no-protection\n'
+    'Key-Type: RSA\n'
+    'Key-Length: 4096\n'
+    'Subkey-Type: default\n'
+    'Subkey-Length: 4096\n'
+    'Name-Real: {sign_key_uid}\n'
+    'Expire-Date: 0\n'
+)
+
 
 class SignNodeConfig(BaseConfig):
     def __init__(self, config_file=None, **cmd_args):
@@ -40,6 +52,7 @@ class SignNodeConfig(BaseConfig):
         """
         default_config = {
             "development_mode": False,
+            "is_community_sign_node": False,
             "pgp_keys": {},
             "master_url": DEFAULT_MASTER_URL,
             "ws_master_url": DEFAULT_WS_MASTER_URL,
@@ -62,6 +75,7 @@ class SignNodeConfig(BaseConfig):
         }
         schema = {
             "development_mode": {"type": "boolean", "default": False},
+            "is_community_sign_node": {"type": "boolean", "default": False},
             "pgp_keys": {
                 "type": "list",
                 "required": True,

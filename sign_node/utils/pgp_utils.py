@@ -5,12 +5,15 @@
 
 """CloudLinux Build System PGP related utility functions."""
 
+import typing
 import getpass
 import datetime
+from collections import defaultdict
 
 import gnupg
 import plumbum
 
+from ..config import COMMUNITY_KEY_SUFFIX
 from ..errors import ConfigurationError
 
 
@@ -32,7 +35,10 @@ def init_gpg():
     gnupg.GPG
         Initialized gpg wrapper.
     """
-    gpg = gnupg.GPG(gpgbinary="/usr/bin/gpg2", keyring="/home/alt/.gnupg/pubring.kbx")
+    gpg = gnupg.GPG(
+        gpgbinary="/usr/bin/gpg2",
+        keyring="/home/alt/.gnupg/pubring.kbx",
+    )
     return gpg
 
 
@@ -95,12 +101,20 @@ def verify_pgp_key_password(gpg, keyid, password):
     """
     # Clean all cached passwords.
     restart_gpg_agent()
-    return gpg.verify(gpg.sign("test", keyid=keyid, passphrase=password).data).valid
+    return gpg.verify(
+        gpg.sign("test", keyid=keyid, passphrase=password).data
+    ).valid
 
 
 class PGPPasswordDB(object):
-    def __init__(self, gpg, pgp_keys, development_mode: bool = False,
-                 development_password: str = None):
+    def __init__(
+            self,
+            gpg,
+            key_ids_from_config: typing.List[str],
+            is_community_sign_node: bool = False,
+            development_mode: bool = False,
+            development_password: str = None
+    ):
         """
         Password DB initialization.
 
@@ -108,17 +122,40 @@ class PGPPasswordDB(object):
         ----------
         gpg : gnupg.GPG
             Gpg wrapper.
-        keyids : list of str
-            List of PGP keyids.
+        key_ids_from_config : list of str
+            List of PGP keyids from the config.
         """
+        self.__key_ids = defaultdict(dict)
+        self.__key_ids_from_config = key_ids_from_config
         self.__gpg = gpg
-        self.__keys = {keyid: {'password': ''} for keyid in pgp_keys}
+        self.__is_community_sign_node = is_community_sign_node
         if development_mode and not development_password:
             raise ConfigurationError('You need to provide development PGP '
                                      'password when running in development '
                                      'mode')
         self.__development_mode = development_mode
         self.__development_password = development_password
+
+    @property
+    def key_ids(self):
+        key_ids = self.__key_ids.copy()
+        if self.__development_mode:
+            password = self.__development_password
+        else:
+            password = ''
+        if self.__is_community_sign_node:
+            key_ids.update({
+                key['keyid']: {
+                    'password': password,
+                    'fingerprint': key['fingerprint'],
+                    'subkeys': [
+                        subkey[0] for subkey in key.get('subkeys', [])
+                    ]
+                }
+                for key in self.__gpg.list_keys(True)
+                if any(COMMUNITY_KEY_SUFFIX in uid for uid in key['uids'])
+            })
+        return key_ids
 
     def ask_for_passwords(self):
         """
@@ -132,7 +169,7 @@ class PGPPasswordDB(object):
         """
         existent_keys = {key["keyid"]: key
                          for key in self.__gpg.list_keys(True)}
-        for keyid in self.__keys:
+        for keyid in self.__key_ids_from_config:
             key = existent_keys.get(keyid)
             if not key:
                 raise ConfigurationError(
@@ -148,9 +185,9 @@ class PGPPasswordDB(object):
                 raise ConfigurationError(
                     "PGP key {0} password is not valid".format(keyid)
                 )
-            self.__keys[keyid]["password"] = password
-            self.__keys[keyid]["fingerprint"] = key["fingerprint"]
-            self.__keys[keyid]["subkeys"] = [
+            self.__key_ids[keyid]["password"] = password
+            self.__key_ids[keyid]["fingerprint"] = key["fingerprint"]
+            self.__key_ids[keyid]["subkeys"] = [
                 subkey[0] for subkey in key.get("subkeys", [])
             ]
 
@@ -168,7 +205,7 @@ class PGPPasswordDB(object):
         str
             Password.
         """
-        return self.__keys[keyid]["password"]
+        return self.key_ids[keyid]["password"]
 
     def get_fingerprint(self, keyid):
         """
@@ -184,7 +221,7 @@ class PGPPasswordDB(object):
         str
             fingerprint.
         """
-        return self.__keys[keyid]["fingerprint"]
+        return self.key_ids[keyid]["fingerprint"]
 
     def get_subkeys(self, keyid):
         """
@@ -200,4 +237,4 @@ class PGPPasswordDB(object):
         list
             Subkey fingerprints.
         """
-        return self.__keys[keyid]["subkeys"]
+        return self.key_ids[keyid]["subkeys"]
