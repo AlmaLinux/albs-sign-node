@@ -1,7 +1,6 @@
 from typing import Optional
 
 from immudb_wrapper import ImmudbWrapper
-from plumbum import ProcessExecutionError
 
 
 class Codenotary:
@@ -23,6 +22,8 @@ class Codenotary:
 
     def verify_artifact(self, package_path: str) -> dict:
         result = self.wrapper.authenticate_file(package_path)
+        if 'error' in result:
+            return {}
         return result
 
     def notarize_artifact(self, package_path, old_meta) -> Optional[str]:
