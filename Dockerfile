@@ -4,7 +4,7 @@ COPY ./signnode.repo /etc/yum.repos.d/signnode.repo
 
 RUN dnf install -y epel-release && \
     dnf upgrade -y && \
-    dnf install -y --enablerepo="powertools" --enablerepo="epel" --enablerepo="signnode" \
+    dnf install -y --enablerepo="crb" --enablerepo="epel" --enablerepo="signnode" \
         rpm-sign python3 python3-devel python3-virtualenv git \
         python3-pycurl tree mlocate keyrings-filesystem pinentry \
         ubu-keyring debian-keyring raspbian-keyring strace procps-ng sudo && \
