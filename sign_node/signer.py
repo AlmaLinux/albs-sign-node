@@ -134,8 +134,8 @@ class Signer(object):
                     'detach-sign': '--detach-sign',
                 }
             )
-            with tempfile.NamedTemporaryFile(mode='w', suffix='.asc') as fd:
-                asc_file_name = Path(fd.name)
+            with tempfile.NamedTemporaryFile(mode='w') as fd:
+                asc_file_name = Path(fd.name).with_suffix('.asc')
                 fd.write(payload['content'])
                 fd.flush()
                 sign_cmd = plumbum.local['gpg'][
