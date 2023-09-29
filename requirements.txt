@@ -18,4 +18,4 @@ websocket-client==0.59.0
 # https://jasonralph.org/?p=997
 cryptography==37.0.4
 pgpy==0.5.4
-git+https://github.com/AlmaLinux/immudb-wrapper.git@0.1.1#egg=immudb_wrapper
+git+https://github.com/AlmaLinux/immudb-wrapper.git@0.1.2#egg=immudb_wrapper
