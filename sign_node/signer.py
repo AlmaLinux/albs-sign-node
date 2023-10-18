@@ -439,25 +439,23 @@ class Signer(object):
             Sign task.
         """
 
+        # We will need this one to map downloaded packages to the package info
+        # from the task payload
+        pkg_info_mapping = {}
+        pkg_verification_mapping = {}
+
         def download_package(pkg: dict):
-            verification = None
             package_type = package.get('type', 'rpm')
             if package_type in ('deb', 'dsc'):
                 download_dir = debs_dir
             else:
                 download_dir = rpms_dir
             pkg_path = self._download_package(download_dir, pkg)
-            if self.__notar_enabled and pkg.get('cas_hash'):
-                verification = self.__notary.verify_artifact(pkg_path)
-                if not verification:
-                    raise SignError(
-                        f'Package {pkg} cannot be verified by codenotary'
-                    )
 
-            return pkg, (pkg['id'], pkg['name'], pkg_path, verification)
+            pkg_info_mapping[pkg_path] = pkg
+            return pkg, (pkg['id'], pkg['name'], pkg_path)
 
-        stats = {}
-        stats['sign_task_start_time'] = str(datetime.utcnow())
+        stats = {'sign_task_start_time': str(datetime.utcnow())}
         pgp_keyid = task['keyid']
         pgp_key_password = self.__password_db.get_password(pgp_keyid)
         fingerprint = self.__password_db.get_fingerprint(pgp_keyid)
@@ -489,6 +487,17 @@ class Signer(object):
                     signed_package.pop('download_url')
                     packages[package['id']] = signed_package
                     downloaded.append(downloaded_info)
+            # Since grpcio library used in immudb client is not thread-safe,
+            # we move its usage outside the multithreaded workflow
+            for pkg_path, pkg_info in pkg_info_mapping.items():
+                if self.__notar_enabled and pkg_info.get('cas_hash'):
+                    verification = self.__notary.verify_artifact(pkg_path)
+                    if not verification:
+                        raise SignError(
+                            f'Package {pkg_info} cannot be verified'
+                        )
+                    pkg_verification_mapping[pkg_path] = verification
+
             finish_time = datetime.utcnow()
             stats['download_packages_time'] = self.timedelta_seconds(
                 start_time, finish_time)
@@ -521,7 +530,8 @@ class Signer(object):
             sequential_upload_files = {}
             packages_hrefs = {}
             files_to_check = list()
-            for package_id, file_name, package_path, old_meta in downloaded:
+            for package_id, file_name, package_path in downloaded:
+                old_meta = pkg_verification_mapping.get(package_path)
                 if self.__notar_enabled and old_meta is not None:
                     cas_hash = self.__notary.notarize_artifact(
                         package_path, old_meta
@@ -592,6 +602,9 @@ class Signer(object):
             self._report_signed_build(task['id'], response_payload)
             if os.path.exists(task_dir):
                 shutil.rmtree(task_dir)
+            # Explicit deletion to avoid memory leaks
+            del pkg_info_mapping
+            del pkg_verification_mapping
 
     def _report_signed_build(self, task_id, response_payload):
         """
