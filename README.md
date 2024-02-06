@@ -1,5 +1,7 @@
 # System Overview
 
+[![badges](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/maccelf/7d2552a0fbf81edbaa7d3deb001e142b/raw/sign-node-badge__master.json)](https://github.com/AlmaLinux/albs-sign-node/blob/master/README.md)
+
 AlmaLinux Build System Sing Node is designed to sign build packages.
 
 Sign Node sends a request to the [Web-Server](https://github.com/AlmaLinux/albs-web-server) and receives back a task to sign packages. 
