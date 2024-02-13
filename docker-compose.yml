@@ -10,5 +10,6 @@ services:
       - "./almalinux_sign_node.py:/sign-node/almalinux_sign_node.py"
       - "./sign_node:/sign-node/sign_node"
       - "./requirements.txt:/sign-node/requirements.txt"
+      - "./tests:/sign-node/tests"
     extra_hosts:
      - "beta-build.cloudlinux.com:192.168.246.79"
