@@ -118,6 +118,14 @@ class Signer(object):
             response_payload
         )
 
+    def report_signed_build_error(self, task: typing.Dict, msg: str):
+        response_payload = {
+            'build_id': task['build_id'],
+            'success': False,
+            'error_message': msg,
+        }
+        self._report_signed_build(task['id'], response_payload)
+
     def sign_loop(self):
         while True:
             sign_task = None
