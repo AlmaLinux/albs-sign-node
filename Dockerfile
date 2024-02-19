@@ -6,6 +6,7 @@ RUN dnf install -y epel-release && \
     dnf upgrade -y && \
     dnf install -y --enablerepo="crb" --enablerepo="epel" --enablerepo="signnode" \
         rpm-sign python3 python3-devel python3-virtualenv git \
+        glibc-langpack-en \
         python3-pycurl tree mlocate keyrings-filesystem pinentry \
         ubu-keyring debian-keyring raspbian-keyring strace procps-ng sudo && \
     dnf clean all
