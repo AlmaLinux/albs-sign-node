@@ -1,0 +1,11 @@
+services:
+  sign_node:
+    extends:
+      file: docker-compose.yml
+      service: sign_node
+    image: sign-node-devel:latest
+    build:
+      context: .
+      target: devel
+    volumes:
+      - ".:/sign-node"

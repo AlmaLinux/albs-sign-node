@@ -1,30 +1,35 @@
-FROM almalinux:9
+FROM almalinux:9 as prod
+
+ARG UID=1000
+ARG GID=1000
+RUN groupadd -g $GID alt && \
+    useradd -ms /bin/bash -u $UID -g $GID alt && \
+    usermod -aG wheel alt
 
 COPY ./signnode.repo /etc/yum.repos.d/signnode.repo
-
-RUN dnf install -y epel-release && \
-    dnf upgrade -y && \
-    dnf install -y --enablerepo="crb" --enablerepo="epel" --enablerepo="signnode" \
-        rpm-sign python3 python3-devel python3-virtualenv git \
-        python3-pycurl tree mlocate keyrings-filesystem pinentry \
-        ubu-keyring debian-keyring raspbian-keyring strace procps-ng sudo && \
+RUN dnf upgrade -y && dnf install -y --enablerepo="signnode" \
+        rpm-sign pinentry keyrings-filesystem ubu-keyring debian-keyring raspbian-keyring git && \
     dnf clean all
 
-RUN curl https://raw.githubusercontent.com/vishnubob/wait-for-it/master/wait-for-it.sh -o wait_for_it.sh && chmod +x wait_for_it.sh
-RUN groupadd -g 1000 alt && \
-    useradd -ms /bin/bash -u 1000 -g 1000 alt && \
-    usermod -aG wheel alt && \
-    echo 'alt ALL=(ALL) NOPASSWD:ALL' >> /etc/sudoers && \
-    echo 'wheel ALL=(ALL) NOPASSWD:ALL' >> /etc/sudoers
-
 WORKDIR /sign-node
+COPY requirements.txt requirements.txt
+RUN python3 -m ensurepip && pip3 install -r requirements.txt && \
+    rm requirements.txt
 
-COPY requirements.txt /sign-node/requirements.txt
-
-RUN python3 -m venv --system-site-packages env
-RUN cd /sign-node && source env/bin/activate && pip3 install --upgrade pip && pip3 install -r requirements.txt --no-cache-dir
-
-RUN chown -R alt:alt /sign-node /wait_for_it.sh /srv
+RUN chown alt:alt /sign-node
 USER alt
 
-CMD ["/bin/bash", "-c", "source env/bin/activate && pip3 install --upgrade pip && pip3 install -r requirements.txt --no-cache-dir && python3 almalinux_sign_node.py"]
+
+FROM prod as devel
+
+USER root
+RUN printf '%s ALL=(ALL) NOPASSWD:ALL\n' alt wheel >> /etc/sudoers
+RUN dnf install -y sudo strace procps-ng which && \
+    dnf clean all
+
+COPY requirements.* .
+COPY requirements.devel.txt requirements.devel.txt
+RUN pip3 install -r requirements.devel.txt && \
+    rm requirements.*
+
+USER alt
