@@ -5,9 +5,10 @@
 
 """CloudLinux Build System PGP related utility functions."""
 
-import typing
-import getpass
 import datetime
+import getpass
+import os
+import typing
 from collections import defaultdict
 
 import gnupg
@@ -15,7 +16,6 @@ import plumbum
 
 from ..config import COMMUNITY_KEY_SUFFIX
 from ..errors import ConfigurationError
-
 
 __all__ = [
     "init_gpg",
@@ -37,7 +37,7 @@ def init_gpg():
     """
     gpg = gnupg.GPG(
         gpgbinary="/usr/bin/gpg2",
-        keyring="/home/alt/.gnupg/pubring.kbx",
+        keyring=os.path.abspath(os.path.expanduser('~/.gnupg/pubring.kbx'))
     )
     return gpg
 

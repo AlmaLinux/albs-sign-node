@@ -1,6 +1,9 @@
 # System Overview
 
-[![badges](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/maccelf/7d2552a0fbf81edbaa7d3deb001e142b/raw/sign-node-badge__master.json)](https://github.com/AlmaLinux/albs-sign-node/blob/master/README.md)
+<picture>
+  <img alt="Test Coverage" src="https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/andrewlukoshko/fd471834348bb248a0881bc9ccfd45dd/raw/coverage-badge.json">
+</picture>
+<br/><br/>
 
 AlmaLinux Build System Sing Node is designed to sign build packages.
 
@@ -21,9 +24,9 @@ Build System works with RPM packages, so to sign them python code emulates bash 
 You can start the system using the Docker Compose tool.
 
 Pre-requisites:
-* `docker` and `docker-compose` tools are installed and set up;
+* `docker` and `docker-compose-plugin` tools are installed and set up;
 
-To start the system, run the following command: `docker-compose up -d`. To rebuild images after your local changes, just run `docker-compose up -d --build`.
+To start the system, run the following command: `docker compose up -d`. To rebuild images after your local changes, just run `docker compose up -d --build`.
 
 # Reporting issues 
 
