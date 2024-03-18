@@ -5,5 +5,5 @@ services:
       context: .
     command: "python3 almalinux_sign_node.py -v"
     volumes:
-      - "./node-config:/root/.config"
       - ".:/sign-node"
+      - "./node-config/sign_node.yml:/root/.config/sign_node.yml"
