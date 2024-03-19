@@ -1,5 +1,5 @@
-[signnode]
+[buildsystem]
 baseurl = https://repo.almalinux.org/build_system/9/$basearch/
 enabled = 0
 gpgcheck = 0
-name = AlmaLinux - 9 - SignNode
+name = AlmaLinux - 9 - BuildSystem

@@ -1,7 +1,7 @@
 FROM almalinux:9
 
-COPY ./signnode.repo /etc/yum.repos.d/signnode.repo
-RUN dnf upgrade -y && dnf install -y --enablerepo="signnode" \
+COPY signnode.repo /etc/yum.repos.d/signnode.repo
+RUN dnf upgrade -y && dnf install -y --enablerepo="buildsystem" \
         rpm-sign pinentry keyrings-filesystem ubu-keyring debian-keyring raspbian-keyring git && \
     dnf clean all
 
