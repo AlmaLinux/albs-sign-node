@@ -33,9 +33,10 @@ def init_sentry(config: SignNodeConfig):
 def main():
     args_parser = init_args_parser()
     args = args_parser.parse_args()
-    configure_logger(args.verbose)
+    logger = configure_logger(args.verbose)
     try:
         config_file = locate_config_file('sign_node', args.config)
+        logger.debug("Loading %s", config_file if config_file else 'default configuration')
         config = SignNodeConfig(config_file)
     except ValueError as e:
         args_parser.error('Configuration error: {0}'.format(e))
