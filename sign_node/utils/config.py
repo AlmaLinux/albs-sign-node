@@ -137,7 +137,8 @@ class BaseConfig(object):
     def __parse_config_file(self, config_path):
         with open(config_path, "rb") as fd:
             config = yaml.safe_load(fd)
-        self.__config.update(config)
+        if config:
+            self.__config.update(config)
 
     def __validate_config(self, schema):
         validator = ConfigValidator(schema or {})
