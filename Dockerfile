@@ -1,7 +1,7 @@
 FROM almalinux:9
 
 COPY signnode.repo /etc/yum.repos.d/signnode.repo
-RUN <<EOT bash
+RUN <<EOT
   set -ex
   dnf upgrade -y
   dnf install -y rpm-sign pinentry keyrings-filesystem ubu-keyring debian-keyring raspbian-keyring git
@@ -10,7 +10,7 @@ EOT
 
 WORKDIR /sign-node
 COPY requirements.* .
-RUN <<EOT bash
+RUN <<EOT
   set -ex
   python3 -m ensurepip
   pip3 install -r requirements.devel.txt
