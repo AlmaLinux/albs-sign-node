@@ -3,7 +3,7 @@ services:
     image: sign-node:latest
     build:
       context: .
-      target: sign-file
+      target: sign-node
     command: "python3 almalinux_sign_node.py -v"
     volumes:
       - ".:/sign-node"
