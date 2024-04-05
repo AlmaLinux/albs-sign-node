@@ -3,7 +3,16 @@ services:
     image: sign-node:latest
     build:
       context: .
+      target: sign-file
     command: "python3 almalinux_sign_node.py -v"
     volumes:
       - ".:/sign-node"
       - "./node-config/sign_node.yml:/root/.config/sign_node.yml"
+
+  sign_node_tests:
+    image: sign-node-tests:latest
+    build:
+      context: .
+      target: sign-node-tests
+    volumes:
+      - ".:/sign-node"
