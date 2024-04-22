@@ -1,4 +1,4 @@
-FROM almalinux:9 as sign-node
+FROM almalinux/9-base:latest as sign-node
 
 COPY signnode.repo /etc/yum.repos.d/signnode.repo
 RUN <<EOT
@@ -14,7 +14,7 @@ RUN <<EOT
   set -ex
   python3 -m ensurepip
   pip3 install -r requirements.txt
-  rm requirements.txt
+  rm -rf requirements.txt ~/.cache/pip
 EOT
 
 ADD --chmod=755 https://raw.githubusercontent.com/vishnubob/wait-for-it/master/wait-for-it.sh /
@@ -26,5 +26,5 @@ COPY requirements-tests.txt .
 RUN <<EOT
   set -ex
   pip3 install -r requirements-tests.txt
-  rm requirements-tests.txt
+  rm -rf requirements-tests.txt ~/.cache/pip
 EOT
