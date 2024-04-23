@@ -4,7 +4,7 @@ COPY signnode.repo /etc/yum.repos.d/signnode.repo
 RUN <<EOT
   set -ex
   dnf upgrade -y
-  dnf install -y rpm-sign pinentry keyrings-filesystem ubu-keyring debian-keyring raspbian-keyring git
+  dnf install -y rpm-sign pinentry keyrings-filesystem ubu-keyring debian-keyring raspbian-keyring git glibc-langpack-en
   dnf clean all
 EOT
 
