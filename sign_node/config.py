@@ -24,6 +24,7 @@ DEFAULT_PGP_PASSWORD = "test_pwd"
 DEFAULT_SENTRY_DSN = ""
 DEFAULT_SENTRY_ENVIRONMENT = "dev"
 DEFAULT_SENTRY_TRACES_SAMPLE_RATE = 0.2
+DEFAULT_JWT_TOKEN = "test_jwt"
 
 COMMUNITY_KEY_SUFFIX = 'ALBS community repo'
 
@@ -53,7 +54,8 @@ class SignNodeConfig(BaseConfig):
         default_config = {
             "development_mode": False,
             "is_community_sign_node": False,
-            "pgp_keys": {},
+            "pgp_keys": [],
+            "jwt_token": DEFAULT_JWT_TOKEN,
             "master_url": DEFAULT_MASTER_URL,
             "ws_master_url": DEFAULT_WS_MASTER_URL,
             "node_id": self.generate_node_id(postfix=".sign"),
@@ -76,11 +78,7 @@ class SignNodeConfig(BaseConfig):
         schema = {
             "development_mode": {"type": "boolean", "default": False},
             "is_community_sign_node": {"type": "boolean", "default": False},
-            "pgp_keys": {
-                "type": "list",
-                "required": True,
-                "empty": False,
-            },
+            "pgp_keys": {"type": "list", "required": True},
             "node_id": {"type": "string", "required": True},
             "master_url": {"type": "string", "required": True},
             "ws_master_url": {"type": "string", "required": True},
@@ -91,7 +89,7 @@ class SignNodeConfig(BaseConfig):
             "pulp_password": {"type": "string", "nullable": False},
             "pulp_chunk_size": {"type": "integer", "nullable": False},
             "parallel_upload_file_size": {"type": "integer", "nullable": False},
-            "jwt_token": {"type": "string", "nullable": True},
+            "jwt_token": {"type": "string", "required": True},
             "dev_pgp_key_password": {"type": "string", "nullable": False},
             "sentry_dsn": {"type": "string", "nullable": True},
             "sentry_environment": {"type": "string", "nullable": True},

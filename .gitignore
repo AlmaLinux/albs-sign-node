@@ -132,6 +132,3 @@ dmypy.json
 .idea/
 .vscode/
 .DS_Store
-
-# Misc
-node-config/
