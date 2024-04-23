@@ -7,17 +7,42 @@
 CloudLinux Build System builds sign node.
 """
 
+import argparse
+import logging
 import sys
 
 import sentry_sdk
 
-from sign_node.errors import ConfigurationError
 from sign_node.config import SignNodeConfig
-from sign_node.cli import init_args_parser, init_working_dir
+from sign_node.errors import ConfigurationError
 from sign_node.signer import Signer
 from sign_node.utils.config import locate_config_file
-from sign_node.utils.log import configure_logger
-from sign_node.utils.pgp_utils import init_gpg, PGPPasswordDB
+from sign_node.utils.file_utils import clean_dir, safe_mkdir
+from sign_node.utils.pgp_utils import PGPPasswordDB, init_gpg
+
+
+def init_arg_parser():
+    parser = argparse.ArgumentParser(
+        prog="sign_node", description="CloudLinux Build System builds sign node"
+    )
+    parser.add_argument("-c", "--config", help="configuration file path")
+    parser.add_argument(
+        "-v", "--verbose", action="store_true", help="enable additional debug output"
+    )
+    return parser
+
+
+def init_logger(verbose):
+    level = logging.DEBUG if verbose else logging.INFO
+    handler = logging.StreamHandler()
+    handler.setLevel(level)
+    log_format = "%(asctime)s %(levelname)-8s [%(threadName)s]: %(message)s"
+    formatter = logging.Formatter(log_format, "%y.%m.%d %H:%M:%S")
+    handler.setFormatter(formatter)
+    logger = logging.getLogger()
+    logger.addHandler(handler)
+    logger.setLevel(level)
+    return logger
 
 
 def init_sentry(config: SignNodeConfig):
@@ -30,10 +55,19 @@ def init_sentry(config: SignNodeConfig):
     )
 
 
+def init_working_dir(config):
+    working_dir = config.working_dir
+    if not safe_mkdir(working_dir):
+        logging.debug("cleaning up the %s working directory", working_dir)
+        clean_dir(working_dir)
+    else:
+        logging.debug("working directory %s was created", working_dir)
+
+
 def main():
-    args_parser = init_args_parser()
+    args_parser = init_arg_parser()
     args = args_parser.parse_args()
-    logger = configure_logger(args.verbose)
+    logger = init_logger(args.verbose)
     try:
         config_file = locate_config_file('sign_node', args.config)
         logger.debug("Loading %s", config_file if config_file else 'default configuration')
@@ -55,7 +89,7 @@ def main():
     except ConfigurationError as e:
         args_parser.error(str(e))
 
-    init_working_dir(config.working_dir)
+    init_working_dir(config)
 
     signer = Signer(config, password_db, gpg)
     signer.sign_loop()
