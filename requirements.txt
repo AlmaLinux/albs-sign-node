@@ -15,5 +15,5 @@ websocket-client==0.59.0
 # Pin cryptography module for now. More info at:
 # https://jasonralph.org/?p=997
 cryptography==37.0.4
-pgpy==0.5.4
+pgpy==0.6.0
 git+https://github.com/AlmaLinux/immudb-wrapper.git@0.1.4#egg=immudb_wrapper
