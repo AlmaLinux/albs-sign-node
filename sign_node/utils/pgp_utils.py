@@ -7,8 +7,6 @@
 
 import datetime
 import getpass
-import os
-import typing
 from collections import defaultdict
 
 import gnupg
@@ -16,6 +14,7 @@ import plumbum
 
 from ..config import COMMUNITY_KEY_SUFFIX
 from ..errors import ConfigurationError
+from .file_utils import normalize_path
 
 __all__ = [
     "init_gpg",
@@ -37,7 +36,7 @@ def init_gpg():
     """
     gpg = gnupg.GPG(
         gpgbinary="/usr/bin/gpg2",
-        keyring=os.path.abspath(os.path.expanduser('~/.gnupg/pubring.kbx'))
+        keyring=normalize_path('~/.gnupg/pubring.kbx')
     )
     return gpg
 
@@ -110,7 +109,7 @@ class PGPPasswordDB(object):
     def __init__(
             self,
             gpg,
-            key_ids_from_config: typing.List[str],
+            key_ids_from_config: list[str],
             is_community_sign_node: bool = False,
             development_mode: bool = False,
             development_password: str = None
@@ -163,7 +162,7 @@ class PGPPasswordDB(object):
 
         Raises
         ------
-        castor.errors.ConfigurationError
+        errors.ConfigurationError
             If a private GPG key is not found or an entered password is
             incorrect.
         """
