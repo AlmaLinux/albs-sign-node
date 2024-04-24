@@ -4,7 +4,7 @@ filesplit==3.0.2
 pulpcore-client==3.16.0
 scikit_build==0.17.6
 cerberus==1.3.3
-validators==0.22.0
+validators==0.28.1
 pycurl==7.45.3
 pyyaml==5.4.1
 pydantic==2.2.1
