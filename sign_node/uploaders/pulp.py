@@ -175,7 +175,7 @@ class PulpBaseUploader(BaseUploader):
         if response.results:
             return response.results[0].pulp_href
 
-    def upload(self, artifacts_dir: str, **kwargs) -> List[str]:
+    def upload(self, artifacts_dir: str, **kwargs) -> List[Artifact]:
         """
 
         Parameters

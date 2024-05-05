@@ -1,7 +1,7 @@
 from pydantic import BaseModel
 
 
-__all__ = ["Task"]
+__all__ = ["Task", "Artifact"]
 
 
 class Task(BaseModel):
