@@ -5,17 +5,14 @@
 
 import enum
 import os
-import json
 import logging
 import pprint
 import shutil
 import glob
 import time
 import traceback
-import tempfile
 import typing
 import urllib.parse
-from collections import defaultdict
 from concurrent.futures import (
     ThreadPoolExecutor,
     as_completed,
@@ -25,11 +22,9 @@ from pathlib import Path
 
 from urllib3 import Retry
 
-import websocket
 import requests
 import requests.adapters
 import plumbum
-import pexpect
 import rpm
 import pgpy
 
