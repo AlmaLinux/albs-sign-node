@@ -10,7 +10,7 @@ pyyaml==5.4.1
 pydantic==2.7.1
 pexpect==4.9.0
 python-gnupg==0.5.2
-sentry-sdk==1.39.1
+sentry-sdk==2.4.0
 websocket-client==0.59.0
 # Pin cryptography module for now. More info at:
 # https://jasonralph.org/?p=997
