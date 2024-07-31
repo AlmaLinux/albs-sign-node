@@ -11,7 +11,7 @@ pydantic==2.7.1
 pexpect==4.9.0
 python-gnupg==0.5.2
 sentry-sdk==2.11.0
-websocket-client==0.59.0
+websocket-client==1.8.0
 # Pin cryptography module for now. More info at:
 # https://jasonralph.org/?p=997
 cryptography==43.0.0
