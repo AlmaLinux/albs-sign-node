@@ -53,7 +53,8 @@ def sign_rpm_package(path, keyid, password, sign_files=False,
     logging.info('Deleting previous signatures')
     for pkg_path in path.split(' '):
         logging.debug('Deleting signature from %s', pkg_path)
-        code, out, err = plumbum.local['rpmsign']['--delsign', pkg_path].run(
+        code, out, err = plumbum.local['rpmsign'].run(
+            args=('--delsign', pkg_path),
             retcode=None
         )
         logging.debug('Command result: %d, %s\n%s', code, out, err)
