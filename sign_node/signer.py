@@ -387,6 +387,7 @@ class Signer(object):
 
         stats = {'sign_task_start_time': str(datetime.utcnow())}
         pgp_keyid = task['keyid']
+        sign_files = task.get('sign_files', False)
         pgp_key_password = self.__password_db.get_password(pgp_keyid)
         fingerprint = self.__password_db.get_fingerprint(pgp_keyid)
         task_dir = self.__working_dir_path.joinpath(str(task['id']))
@@ -441,6 +442,8 @@ class Signer(object):
                             ' '.join(packages_to_sign),
                             pgp_keyid,
                             pgp_key_password,
+                            sign_files=sign_files,
+                            sign_files_cert_path=self.__config.files_sign_cert_path,
                         )
                         packages_to_sign = []
                 if packages_to_sign:
@@ -448,6 +451,8 @@ class Signer(object):
                         ' '.join(packages_to_sign),
                         pgp_keyid,
                         pgp_key_password,
+                        sign_files=sign_files,
+                        sign_files_cert_path=self.__config.files_sign_cert_path,
                     )
             finish_time = datetime.utcnow()
             stats['sign_packages_time'] = self.timedelta_seconds(

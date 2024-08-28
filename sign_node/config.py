@@ -74,6 +74,7 @@ class SignNodeConfig(BaseConfig):
             'immudb_database': None,
             'immudb_address': None,
             'immudb_public_key_file': None,
+            'files_sign_cert_path': '/etc/pki/ima/ima-sign.key',
         }
         schema = {
             "development_mode": {"type": "boolean", "default": False},
@@ -99,6 +100,10 @@ class SignNodeConfig(BaseConfig):
             'immudb_database': {'type': 'string', 'nullable': True},
             'immudb_address': {'type': 'string', 'nullable': True},
             'immudb_public_key_file': {'type': 'string', 'nullable': True},
+            'files_sign_cert_path': {
+                'type': 'string', 'required': False,
+                'coerce': normalize_path,
+            },
         }
         super(SignNodeConfig, self).__init__(
             default_config, config_file, schema, **cmd_args
