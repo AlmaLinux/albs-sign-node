@@ -9,7 +9,7 @@ pycurl==7.45.3
 pyyaml==6.0.2
 pydantic==2.9.2
 pexpect==4.9.0
-python-gnupg==0.5.2
+python-gnupg==0.5.3
 sentry-sdk==2.15.0
 websocket-client==1.8.0
 # Pin cryptography module for now. More info at:
