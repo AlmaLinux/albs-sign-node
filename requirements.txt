@@ -1,4 +1,4 @@
-plumbum==1.8.3
+plumbum==1.9.0
 requests>=2.31.0
 filesplit==3.0.2
 pulpcore-client==3.66.0
