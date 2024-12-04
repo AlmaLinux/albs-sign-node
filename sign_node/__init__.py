@@ -3,5 +3,5 @@
 # created: 2018-03-31
 
 """
-CloudLinux Build System builds sign node module.
+AlmaLinux Build System builds sign node module.
 """

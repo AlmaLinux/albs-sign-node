@@ -4,7 +4,7 @@
 # created: 2018-03-31
 
 """
-CloudLinux Build System builds sign node.
+AlmaLinux Build System builds sign node.
 """
 
 import argparse
@@ -12,22 +12,25 @@ import logging
 import sys
 
 import sentry_sdk
+from albs_common_lib.errors import ConfigurationError
+from albs_common_lib.utils.file_utils import clean_dir, safe_mkdir
+from albs_common_lib.utils.pgp_utils import PGPPasswordDB, init_gpg
 
 from sign_node.config import SignNodeConfig
-from sign_node.errors import ConfigurationError
 from sign_node.signer import Signer
 from sign_node.utils.config import locate_config_file
-from sign_node.utils.file_utils import clean_dir, safe_mkdir
-from sign_node.utils.pgp_utils import PGPPasswordDB, init_gpg
 
 
 def init_arg_parser():
     parser = argparse.ArgumentParser(
-        prog="sign_node", description="CloudLinux Build System builds sign node"
+        prog="sign_node", description="AlmaLinux Build System builds sign node"
     )
     parser.add_argument("-c", "--config", help="configuration file path")
     parser.add_argument(
-        "-v", "--verbose", action="store_true", help="enable additional debug output"
+        "-v",
+        "--verbose",
+        action="store_true",
+        help="enable additional debug output",
     )
     return parser
 
@@ -70,7 +73,10 @@ def main():
     logger = init_logger(args.verbose)
     try:
         config_file = locate_config_file('sign_node', args.config)
-        logger.debug("Loading %s", config_file if config_file else 'default configuration')
+        logger.debug(
+            "Loading %s",
+            config_file if config_file else 'default configuration',
+        )
         config = SignNodeConfig(config_file)
     except ValueError as e:
         args_parser.error('Configuration error: {0}'.format(e))
@@ -82,7 +88,7 @@ def main():
         key_ids_from_config=config.pgp_keys.copy(),
         is_community_sign_node=config.is_community_sign_node,
         development_mode=config.development_mode,
-        development_password=config.dev_pgp_key_password
+        development_password=config.dev_pgp_key_password,
     )
     try:
         password_db.ask_for_passwords()

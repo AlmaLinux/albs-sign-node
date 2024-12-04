@@ -2,11 +2,11 @@ import operator
 import os
 from unittest.mock import Mock, patch
 
+from albs_common_lib.utils.file_utils import hash_file
+from albs_sign_lib.models import Artifact
 from pyfakefs.fake_filesystem_unittest import TestCase
 
-from sign_node.models import Artifact
 from sign_node.uploaders.pulp import PulpRpmUploader
-from sign_node.utils.file_utils import hash_file
 
 
 class TestPulpRpmUploader(TestCase):
