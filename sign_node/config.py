@@ -3,14 +3,13 @@
 # created: 2018-03-31
 
 """
-CloudLinux Build System builds sign node configuration storage.
+AlmaLinux Build System builds sign node configuration storage.
 """
 
+from albs_common_lib.utils.file_utils import normalize_path
+from albs_sign_lib.constants import DEFAULT_PARALLEL_FILE_UPLOAD_SIZE
+
 from .utils.config import BaseConfig
-from .utils.file_utils import normalize_path
-
-__all__ = ["SignNodeConfig"]
-
 
 DEFAULT_MASTER_URL = 'http://web_server:8000/api/v1/'
 DEFAULT_WS_MASTER_URL = 'ws://web_server:8000/api/v1/'
@@ -18,15 +17,11 @@ DEFAULT_PULP_HOST = "http://pulp"
 DEFAULT_PULP_USER = "pulp"
 DEFAULT_PULP_PASSWORD = "test_pwd"
 DEFAULT_PULP_CHUNK_SIZE = 8388608  # 8 MiB
-# Max file size to allow parallel upload for
-DEFAULT_PARALLEL_FILE_UPLOAD_SIZE = 52428800  # 500 MB
 DEFAULT_PGP_PASSWORD = "test_pwd"
 DEFAULT_SENTRY_DSN = ""
 DEFAULT_SENTRY_ENVIRONMENT = "dev"
 DEFAULT_SENTRY_TRACES_SAMPLE_RATE = 0.2
 DEFAULT_JWT_TOKEN = "test_jwt"
-
-COMMUNITY_KEY_SUFFIX = 'ALBS community repo'
 
 GPG_SCENARIO_TEMPLATE = (
     '%no-protection\n'
@@ -64,6 +59,7 @@ class SignNodeConfig(BaseConfig):
             "pulp_user": DEFAULT_PULP_USER,
             "pulp_password": DEFAULT_PULP_PASSWORD,
             "pulp_chunk_size": DEFAULT_PULP_CHUNK_SIZE,
+            "parallel_upload": True,
             "parallel_upload_file_size": DEFAULT_PARALLEL_FILE_UPLOAD_SIZE,
             "dev_pgp_key_password": DEFAULT_PGP_PASSWORD,
             'sentry_dsn': DEFAULT_SENTRY_DSN,
@@ -83,13 +79,24 @@ class SignNodeConfig(BaseConfig):
             "node_id": {"type": "string", "required": True},
             "master_url": {"type": "string", "required": True},
             "ws_master_url": {"type": "string", "required": True},
-            "working_dir": {"type": "string", "required": True,
-                            "coerce": normalize_path},
+            "working_dir": {
+                "type": "string",
+                "required": True,
+                "coerce": normalize_path,
+            },
             "pulp_host": {"type": "string", "nullable": False},
             "pulp_user": {"type": "string", "nullable": False},
             "pulp_password": {"type": "string", "nullable": False},
             "pulp_chunk_size": {"type": "integer", "nullable": False},
-            "parallel_upload_file_size": {"type": "integer", "nullable": False},
+            "parallel_upload": {
+                "type": "boolean",
+                "nullable": False,
+                "default": True,
+            },
+            "parallel_upload_file_size": {
+                "type": "integer",
+                "nullable": False,
+            },
             "jwt_token": {"type": "string", "required": True},
             "dev_pgp_key_password": {"type": "string", "nullable": False},
             "sentry_dsn": {"type": "string", "nullable": True},
@@ -101,7 +108,8 @@ class SignNodeConfig(BaseConfig):
             'immudb_address': {'type': 'string', 'nullable': True},
             'immudb_public_key_file': {'type': 'string', 'nullable': True},
             'files_sign_cert_path': {
-                'type': 'string', 'required': False,
+                'type': 'string',
+                'required': False,
                 'coerce': normalize_path,
             },
         }

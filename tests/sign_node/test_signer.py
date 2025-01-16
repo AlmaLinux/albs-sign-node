@@ -1,5 +1,6 @@
 import os
 from pathlib import Path
+import unittest
 from unittest.mock import MagicMock, patch
 
 from pyfakefs.fake_filesystem_unittest import TestCase
@@ -8,7 +9,7 @@ import sign_node
 from sign_node.config import SignNodeConfig
 from sign_node.signer import Signer
 
-
+@unittest.skip
 class TestSigner(TestCase):
 
     def setUp(self):

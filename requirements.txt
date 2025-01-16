@@ -1,13 +1,12 @@
 plumbum==1.9.0
 requests>=2.31.0
 filesplit==3.0.2
-pulpcore-client==3.68.0
+pulpcore-client==3.69.0
 scikit_build==0.18.1
 cerberus==1.3.5
 validators==0.34.0
 pycurl==7.45.3
 pyyaml==6.0.2
-pydantic==2.9.2
 pexpect==4.9.0
 python-gnupg==0.5.3
 sentry-sdk==2.18.0
@@ -15,5 +14,5 @@ websocket-client==1.8.0
 # Pin cryptography module for now. More info at:
 # https://jasonralph.org/?p=997
 cryptography==43.0.3
-pgpy==0.6.0
 git+https://github.com/AlmaLinux/immudb-wrapper.git@0.1.4#egg=immudb_wrapper
+git+https://github.com/AlmaLinux/albs-sign-lib.git@0.1.0#egg=albs_sign_lib

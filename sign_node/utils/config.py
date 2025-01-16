@@ -12,16 +12,14 @@ import platform
 
 import cerberus
 import yaml
-
-from .file_utils import normalize_path
+from albs_common_lib.utils.file_utils import normalize_path
 
 __all__ = ["locate_config_file", "BaseConfig"]
 
 
 class ConfigValidator(cerberus.Validator):
-
     """
-    Custom validator for CloudLinux Build System configuration objects.
+    Custom validator for AlmaLinux Build System configuration objects.
     """
 
     def _validate_type_timedelta(self, value):
@@ -70,7 +68,9 @@ def locate_config_file(component, config_path=None):
     if config_path:
         config_path = normalize_path(config_path)
         if not os.path.exists(config_path):
-            raise ValueError("configuration file {0} is not found".format(config_path))
+            raise ValueError(
+                "configuration file {0} is not found".format(config_path)
+            )
         return config_path
     config_path = normalize_path("~/.config/{0}.yml".format(component))
     if os.path.exists(config_path):
@@ -78,10 +78,11 @@ def locate_config_file(component, config_path=None):
 
 
 class BaseConfig(object):
-
     """Base configuration object for Build System processes."""
 
-    def __init__(self, default_config, config_path=None, schema=None, **cmd_args):
+    def __init__(
+        self, default_config, config_path=None, schema=None, **cmd_args
+    ):
         """
         Configuration object initialization.
 
@@ -144,7 +145,8 @@ class BaseConfig(object):
         validator = ConfigValidator(schema or {})
         if not validator.validate(self.__config):
             error_list = [
-                "{0}: {1}".format(k, ", ".join(v)) for k, v in validator.errors.items()
+                "{0}: {1}".format(k, ", ".join(v))
+                for k, v in validator.errors.items()
             ]
             raise ValueError(". ".join(error_list))
         self.__config = validator.document
