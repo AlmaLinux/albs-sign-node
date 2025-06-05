@@ -75,6 +75,7 @@ class SignNodeConfig(BaseConfig):
             'immudb_address': None,
             'immudb_public_key_file': None,
             'files_sign_cert_path': '/etc/pki/ima/ima-sign.key',
+            'locks_dir_path': '/tmp/gpg_locks',
         }
         schema = {
             "development_mode": {"type": "boolean", "default": False},
@@ -104,6 +105,7 @@ class SignNodeConfig(BaseConfig):
                 'type': 'string', 'required': False,
                 'coerce': normalize_path,
             },
+            'locks_dir_path': {'type': 'string', 'required': True},
         }
         super(SignNodeConfig, self).__init__(
             default_config, config_file, schema, **cmd_args

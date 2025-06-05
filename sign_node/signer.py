@@ -444,6 +444,7 @@ class Signer(object):
                             pgp_key_password,
                             sign_files=sign_files,
                             sign_files_cert_path=self.__config.files_sign_cert_path,
+                            locks_dir_path=self.__config.locks_dir_path,
                         )
                         packages_to_sign = []
                 if packages_to_sign:
@@ -453,6 +454,7 @@ class Signer(object):
                         pgp_key_password,
                         sign_files=sign_files,
                         sign_files_cert_path=self.__config.files_sign_cert_path,
+                        locks_dir_path=self.__config.locks_dir_path,
                     )
             finish_time = datetime.utcnow()
             stats['sign_packages_time'] = self.timedelta_seconds(
