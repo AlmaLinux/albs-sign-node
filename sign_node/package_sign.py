@@ -7,6 +7,9 @@ import traceback
 
 import pexpect
 
+from sign_node.utils.locking import exclusive_lock
+from sign_node.utils.pgp_utils import restart_gpg_agent
+
 __all__ = [
     "sign_rpm_package",
     "PackageSignError",
@@ -19,8 +22,14 @@ class PackageSignError(Exception):
     pass
 
 
-def sign_rpm_package(path, keyid, password, sign_files=False,
-                     sign_files_cert_path='/etc/pki/ima/ima-sign.key'):
+def sign_rpm_package(
+    path,
+    keyid,
+    password,
+    sign_files=False,
+    sign_files_cert_path='/etc/pki/ima/ima-sign.key',
+    locks_dir_path: str = '/tmp/gpg_locks',
+):
     """
     Signs an RPM package.
 
@@ -55,19 +64,23 @@ def sign_rpm_package(path, keyid, password, sign_files=False,
         logging.debug('Deleting signature from %s', pkg_path)
         code, out, err = plumbum.local['rpmsign'].run(
             args=('--delsign', pkg_path),
-            retcode=None
+            retcode=None,
         )
         logging.debug('Command result: %d, %s\n%s', code, out, err)
         if code != 0:
             full_out = '\n'.join((out, err))
-            raise PackageSignError(f'Cannot delete package signature: {full_out}')
-    out, status = pexpect.run(
-        command=final_cmd,
-        events={"Enter passphrase:.*": f"{password}\r"},
-        env={"LC_ALL": "en_US.UTF-8"},
-        timeout=100000,
-        withexitstatus=True,
-    )
+            raise PackageSignError(
+                f'Cannot delete package signature: {full_out}'
+            )
+    with exclusive_lock(locks_dir_path, keyid):
+        out, status = pexpect.run(
+            command=final_cmd,
+            events={"Enter passphrase:.*": f"{password}\r"},
+            env={"LC_ALL": "en_US.UTF-8"},
+            timeout=100000,
+            withexitstatus=True,
+        )
+        restart_gpg_agent()
     if status is None:
         message = (
             f"The RPM signing command is failed with timeout."
@@ -79,7 +92,10 @@ def sign_rpm_package(path, keyid, password, sign_files=False,
         logging.error(
             "The RPM signing command is failed with %s exit code."
             "\nCommand: %s\nOutput:\n%s.\nTraceback: %s",
-            status, final_cmd, out, traceback.format_exc()
+            status,
+            final_cmd,
+            out,
+            traceback.format_exc(),
         )
         raise PackageSignError(
             f"RPM sign failed with {status} exit code.\n"
