@@ -88,8 +88,10 @@ class PulpBaseUploader(BaseUploader):
 
         """
         result = self._tasks_client.read(task_href)
+        delay = 0.3
         while result.state not in ("failed", "completed"):
-            time.sleep(5)
+            time.sleep(delay)
+            delay = min(delay * 2, 5)
             result = self._tasks_client.read(task_href)
         if result.state == "failed":
             raise TaskFailedError(f"task {task_href} has failed, " f"details: {result}")
@@ -113,17 +115,17 @@ class PulpBaseUploader(BaseUploader):
         response = self._uploads_client.create({"size": file_size})
         return response.pulp_href, file_size
 
-    def _commit_upload(self, file_path: str, reference: str) -> str:
+    def _commit_upload(self, reference: str, file_sha256: str) -> str:
         """
         Commits upload and waits until upload will be transformed to artifact.
         Returns artifact reference upon completion.
 
         Parameters
         ----------
-        file_path : str
-            Path to the file.
         reference : str
             Upload reference in Pulp.
+        file_sha256 : str
+            Pre-computed SHA256 of the file.
 
         Returns
         -------
@@ -131,7 +133,6 @@ class PulpBaseUploader(BaseUploader):
             Reference to the created resource.
 
         """
-        file_sha256 = hash_file(file_path, hash_type="sha256")
         response = self._uploads_client.commit(reference, {"sha256": file_sha256})
         task_result = self._wait_for_task_completion(response.task)
         return task_result.created_resources[0]
@@ -167,7 +168,7 @@ class PulpBaseUploader(BaseUploader):
             self._uploads_client.update(
                 f"bytes 0-{file_size - 1}/{file_size}", reference, file_path
             )
-        artifact_href = self._commit_upload(file_path, reference)
+        artifact_href = self._commit_upload(reference, file_sha256)
         return file_sha256, artifact_href
 
     def check_if_artifact_exists(self, sha256: str) -> str:
