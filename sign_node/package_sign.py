@@ -59,19 +59,18 @@ def sign_rpm_package(
     sign_cmd_parts.extend(['-D', f"'_gpg_name {keyid}'", path])
     sign_cmd = ' '.join(sign_cmd_parts)
     final_cmd = f'/bin/bash -c "{sign_cmd}"'
-    logging.info('Deleting previous signatures')
-    for pkg_path in path.split(' '):
-        logging.debug('Deleting signature from %s', pkg_path)
-        code, out, err = plumbum.local['rpmsign'].run(
-            args=('--delsign', pkg_path),
-            retcode=None,
+    pkg_paths = path.split(' ')
+    logging.info('Deleting previous signatures from %d package(s)', len(pkg_paths))
+    code, out, err = plumbum.local['rpmsign'].run(
+        args=['--delsign'] + pkg_paths,
+        retcode=None,
+    )
+    logging.debug('Command result: %d, %s\n%s', code, out, err)
+    if code != 0:
+        full_out = '\n'.join((out, err))
+        raise PackageSignError(
+            f'Cannot delete package signature: {full_out}'
         )
-        logging.debug('Command result: %d, %s\n%s', code, out, err)
-        if code != 0:
-            full_out = '\n'.join((out, err))
-            raise PackageSignError(
-                f'Cannot delete package signature: {full_out}'
-            )
     with exclusive_lock(locks_dir_path, keyid):
         out, status = pexpect.run(
             command=final_cmd,
