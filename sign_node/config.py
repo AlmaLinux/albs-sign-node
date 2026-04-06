@@ -18,6 +18,7 @@ DEFAULT_PULP_HOST = "http://pulp"
 DEFAULT_PULP_USER = "pulp"
 DEFAULT_PULP_PASSWORD = "test_pwd"
 DEFAULT_PULP_CHUNK_SIZE = 8388608  # 8 MiB
+DEFAULT_UPLOAD_WORKERS = 4
 # Max file size to allow parallel upload for
 DEFAULT_PARALLEL_FILE_UPLOAD_SIZE = 524288000  # 500 MB
 DEFAULT_PGP_PASSWORD = "test_pwd"
@@ -64,6 +65,7 @@ class SignNodeConfig(BaseConfig):
             "pulp_user": DEFAULT_PULP_USER,
             "pulp_password": DEFAULT_PULP_PASSWORD,
             "pulp_chunk_size": DEFAULT_PULP_CHUNK_SIZE,
+            "upload_workers": DEFAULT_UPLOAD_WORKERS,
             "parallel_upload_file_size": DEFAULT_PARALLEL_FILE_UPLOAD_SIZE,
             "dev_pgp_key_password": DEFAULT_PGP_PASSWORD,
             'sentry_dsn': DEFAULT_SENTRY_DSN,
@@ -90,6 +92,7 @@ class SignNodeConfig(BaseConfig):
             "pulp_user": {"type": "string", "nullable": False},
             "pulp_password": {"type": "string", "nullable": False},
             "pulp_chunk_size": {"type": "integer", "nullable": False},
+            "upload_workers": {"type": "integer", "nullable": False},
             "parallel_upload_file_size": {"type": "integer", "nullable": False},
             "jwt_token": {"type": "string", "required": True},
             "dev_pgp_key_password": {"type": "string", "nullable": False},
