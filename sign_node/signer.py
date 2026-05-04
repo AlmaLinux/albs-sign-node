@@ -7,8 +7,9 @@ import enum
 import os
 import logging
 import pprint
+import queue
 import shutil
-import glob
+import threading
 import time
 import traceback
 import typing
@@ -80,6 +81,8 @@ class Signer(object):
                 immudb_address=self.__config.immudb_address,
                 immudb_public_key_file=self.__config.immudb_public_key_file,
             )
+        # grpcio in immudb client is not thread-safe — serialize all notary calls
+        self.__notary_lock = threading.Lock()
         self.__session = self.__generate_request_session()
 
     def __generate_request_session(self):
@@ -231,6 +234,32 @@ class Signer(object):
 
         return errors
 
+    def _check_signature_single(self, pkg_path: str, key_id: str) -> typing.List[str]:
+        key_id_lower = key_id.lower()
+        subkeys = [i.lower() for i in self.__password_db.get_subkeys(key_id)]
+        ts = rpm.TransactionSet()
+        ts.setVSFlags(rpm._RPMVSF_NOSIGNATURES)
+
+        if not os.path.exists(pkg_path):
+            return [f'Cannot read file {pkg_path}']
+        with open(pkg_path, 'rb') as fd:
+            header = ts.hdrFromFdno(fd)
+            signature = header[rpm.RPMTAG_SIGGPG]
+            if not signature:
+                signature = header[rpm.RPMTAG_SIGPGP]
+            if not signature:
+                return [f'Package {pkg_path} is not signed']
+
+        pgp_msg = pgpy.PGPMessage.from_blob(signature)
+        sig = ''
+        for signature in pgp_msg.signatures:
+            sig = signature.signer.lower()
+            if sig == key_id_lower:
+                return []
+            if subkeys and sig in subkeys:
+                return []
+        return [f'Package {pkg_path} is signed with the wrong key: {sig}']
+
     @staticmethod
     def timedelta_seconds(start_time: datetime, finish_time: datetime) -> int:
         return int((finish_time - start_time).total_seconds())
@@ -363,27 +392,18 @@ class Signer(object):
         """
         Signs packages from the specified task and uploads them to the server.
 
-        Parameters
-        ----------
-        task : dict
-            Sign task.
+        Pipeline:
+            download pool (4) -> [verify under notary lock] -> sign queue
+                              -> sign batcher (1) -> sign_rpm_package(batch)
+                              -> upload pool (4 parallel + 1 sequential)
+                              -> [check signature, upload, notarize under lock]
+
+        Sign batches flush on size (>=500MB), count (>=50), or age (>=10s).
+        Non-RPM packages skip the sign stage and go straight to upload.
         """
-
-        # We will need this one to map downloaded packages to the package info
-        # from the task payload
-        pkg_info_mapping = {}
-        pkg_verification_mapping = {}
-
-        def download_package(pkg: dict):
-            package_type = package.get('type', 'rpm')
-            if package_type in ('deb', 'dsc'):
-                download_dir = debs_dir
-            else:
-                download_dir = rpms_dir
-            pkg_path = self._download_package(download_dir, pkg)
-
-            pkg_info_mapping[pkg_path] = pkg
-            return pkg, (pkg['id'], pkg['name'], pkg_path)
+        SIGN_BATCH_BYTES = 500 * 1024 * 1024
+        SIGN_BATCH_COUNT = 50
+        SIGN_BATCH_AGE_SECONDS = 10.0
 
         stats = {'sign_task_start_time': str(datetime.utcnow())}
         pgp_keyid = task['keyid']
@@ -393,141 +413,246 @@ class Signer(object):
         task_dir = self.__working_dir_path.joinpath(str(task['id']))
         rpms_dir = task_dir.joinpath('rpms')
         debs_dir = task_dir.joinpath('debs')
-        downloaded = []
-        has_rpms = False
         response_payload = {'build_id': task['build_id'], 'success': True}
-        packages = {}
-        start_time = datetime.utcnow()
 
-        # Detect if there are some RPMs in the payload
-        for package in task['packages']:
-            package_type = package.get('type', 'rpm')
-            if package_type == 'rpm':
-                has_rpms = True
-                break
+        packages = {}                 # pkg_id -> response payload dict
+        packages_hrefs = {}           # name -> href (for same-arch fill-in)
+        seen_shas = set()             # dedup uploads by content sha
+        packages_lock = threading.Lock()
+        seen_lock = threading.Lock()
 
-        try:
-            with ThreadPoolExecutor(max_workers=4) as executor:
-                futures = [executor.submit(download_package, package)
-                           for package in task['packages']]
-                for future in as_completed(futures):
-                    package, downloaded_info = future.result()
-                    # Preparing the payload for returning to web server
-                    signed_package = package.copy()
-                    signed_package['fingerprint'] = fingerprint
-                    signed_package.pop('download_url')
-                    packages[package['id']] = signed_package
-                    downloaded.append(downloaded_info)
-            # Since grpcio library used in immudb client is not thread-safe,
-            # we move its usage outside the multithreaded workflow
-            for pkg_path, pkg_info in pkg_info_mapping.items():
-                if self.__notar_enabled and pkg_info.get('cas_hash'):
-                    verification = self.__notary.verify_artifact(pkg_path)
-                    if not verification:
+        sign_q: queue.Queue = queue.Queue()
+        download_done = threading.Event()
+        error_event = threading.Event()
+        first_error: typing.List[BaseException] = []
+        error_lock = threading.Lock()
+        upload_futures: typing.List = []
+        upload_futures_lock = threading.Lock()
+
+        # Per-stage wall-clock first-in / last-out timestamps
+        stage_times: typing.Dict[str, typing.Optional[float]] = {
+            'download_first': None, 'download_last': None,
+            'sign_first': None, 'sign_last': None,
+            'upload_first': None, 'upload_last': None,
+        }
+        stage_lock = threading.Lock()
+
+        def mark_first(key: str):
+            with stage_lock:
+                if stage_times[key] is None:
+                    stage_times[key] = time.monotonic()
+
+        def mark_last(key: str):
+            now = time.monotonic()
+            with stage_lock:
+                if stage_times[key] is None or now > stage_times[key]:
+                    stage_times[key] = now
+
+        def record_error(exc: BaseException):
+            with error_lock:
+                if not first_error:
+                    first_error.append(exc)
+            error_event.set()
+
+        def submit_upload(item, ul_par, ul_seq):
+            if item['size'] > self.__config.parallel_upload_file_size:
+                pool = ul_seq
+            else:
+                pool = ul_par
+            fut = pool.submit(upload_worker, item)
+            with upload_futures_lock:
+                upload_futures.append(fut)
+
+        def download_worker(package, ul_par, ul_seq):
+            if error_event.is_set():
+                return
+            mark_first('download_first')
+            try:
+                package_type = package.get('type', 'rpm')
+                is_rpm = package_type == 'rpm'
+                download_dir = rpms_dir if is_rpm else debs_dir
+                pkg_path = self._download_package(download_dir, package)
+
+                cas_meta = None
+                if self.__notar_enabled and package.get('cas_hash'):
+                    with self.__notary_lock:
+                        cas_meta = self.__notary.verify_artifact(pkg_path)
+                    if not cas_meta:
                         raise SignError(
-                            f'Package {pkg_info} cannot be verified'
+                            f'Package {package} cannot be verified'
                         )
-                    pkg_verification_mapping[pkg_path] = verification
 
-            finish_time = datetime.utcnow()
-            stats['download_packages_time'] = self.timedelta_seconds(
-                start_time, finish_time)
-            start_time = datetime.utcnow()
-            if has_rpms:
-                packages_to_sign = []
-                for package in glob.glob(os.path.join(rpms_dir, '*/*.rpm')):
-                    packages_to_sign.append(package)
-                    if len(packages_to_sign) % 50 == 0:
-                        sign_rpm_package(
-                            ' '.join(packages_to_sign),
-                            pgp_keyid,
-                            pgp_key_password,
-                            sign_files=sign_files,
-                            sign_files_cert_path=self.__config.files_sign_cert_path,
-                            locks_dir_path=self.__config.locks_dir_path,
-                        )
-                        packages_to_sign = []
-                if packages_to_sign:
-                    sign_rpm_package(
-                        ' '.join(packages_to_sign),
-                        pgp_keyid,
-                        pgp_key_password,
-                        sign_files=sign_files,
-                        sign_files_cert_path=self.__config.files_sign_cert_path,
-                        locks_dir_path=self.__config.locks_dir_path,
-                    )
-            finish_time = datetime.utcnow()
-            stats['sign_packages_time'] = self.timedelta_seconds(
-                start_time, finish_time)
-            start_time = datetime.utcnow()
-            # upload signed packages and report the task completion
-            # Sort files for parallel and sequential upload by their size
-            files_to_upload = set()
-            parallel_upload_files = {}
-            sequential_upload_files = {}
-            packages_hrefs = {}
-            files_to_check = list()
-            for package_id, file_name, package_path in downloaded:
-                old_meta = pkg_verification_mapping.get(package_path)
-                if self.__notar_enabled and old_meta is not None:
-                    cas_hash = self.__notary.notarize_artifact(
-                        package_path, old_meta
-                    )
-                    packages[package_id]['cas_hash'] = cas_hash
-                sha256 = hash_file(package_path, hash_type='sha256')
-                if sha256 not in files_to_upload:
-                    if (os.stat(package_path).st_size <=
-                            self.__config.parallel_upload_file_size):
-                        parallel_upload_files[sha256] = (
-                            package_id, file_name, package_path)
-                    else:
-                        sequential_upload_files[sha256] = (
-                            package_id, file_name, package_path)
-                    files_to_upload.add(sha256)
-                    files_to_check.append(package_path)
-                packages[package_id]['sha256'] = sha256
+                signed_package = package.copy()
+                signed_package['fingerprint'] = fingerprint
+                signed_package.pop('download_url', None)
+                with packages_lock:
+                    packages[package['id']] = signed_package
 
-            finish_time = datetime.utcnow()
-            stats['notarization_packages_time'] = self.timedelta_seconds(
-                start_time, finish_time)
-            start_time = datetime.utcnow()
-
-            sign_errors = self._check_signature(files_to_check, pgp_keyid)
-            finish_time = datetime.utcnow()
-            stats['signature_check_packages_time'] = self.timedelta_seconds(
-                start_time, finish_time)
-            if sign_errors:
-                error_message = 'Errors during checking packages ' \
-                                'signatures: \n{}'.format('\n'.join(sign_errors))
-                logging.error(error_message)
-                raise SignError(error_message)
-
-            start_time = datetime.utcnow()
-            with ThreadPoolExecutor(max_workers=4) as executor:
-                futures = {
-                    executor.submit(
-                        self._upload_artifact, package_path): package_id
-                    for package_id, file_name, package_path
-                    in parallel_upload_files.values()
+                item = {
+                    'pkg_id': package['id'],
+                    'name': package['name'],
+                    'path': pkg_path,
+                    'size': os.stat(pkg_path).st_size,
+                    'cas_meta': cas_meta,
+                    'is_rpm': is_rpm,
                 }
-                for future in as_completed(futures):
-                    result = future.result()
-                    package_id = futures[future]
-                    package_name = packages[package_id]['name']
-                    packages[package_id]['href'] = result.href
-                    packages_hrefs[package_name] = result.href
-            for p_id, file_name, pkg_path in sequential_upload_files.values():
-                uploaded = self._upload_artifact(pkg_path)
-                packages[p_id]['href'] = uploaded.href
-                packages_hrefs[file_name] = uploaded.href
-            # Fill href for packages of the same architecture
+                mark_last('download_last')
+                if is_rpm:
+                    sign_q.put(item)
+                else:
+                    submit_upload(item, ul_par, ul_seq)
+            except Exception as e:
+                logging.exception('Download stage failed for %s', package)
+                record_error(e)
+
+        def flush_batch(batch, ul_par, ul_seq):
+            if not batch or error_event.is_set():
+                return
+            mark_first('sign_first')
+            paths = [it['path'] for it in batch]
+            sign_rpm_package(
+                ' '.join(paths),
+                pgp_keyid,
+                pgp_key_password,
+                sign_files=sign_files,
+                sign_files_cert_path=self.__config.files_sign_cert_path,
+                locks_dir_path=self.__config.locks_dir_path,
+            )
+            mark_last('sign_last')
+            for it in batch:
+                submit_upload(it, ul_par, ul_seq)
+
+        def sign_batcher(ul_par, ul_seq):
+            buf: typing.List[dict] = []
+            buf_bytes = 0
+            first_age: typing.Optional[float] = None
+            try:
+                while True:
+                    if error_event.is_set():
+                        return
+                    if first_age is None:
+                        timeout = 1.0
+                    else:
+                        timeout = max(
+                            0.05,
+                            SIGN_BATCH_AGE_SECONDS - (time.monotonic() - first_age),
+                        )
+                    try:
+                        item = sign_q.get(timeout=timeout)
+                    except queue.Empty:
+                        if download_done.is_set() and sign_q.empty():
+                            flush_batch(buf, ul_par, ul_seq)
+                            return
+                        if buf and (time.monotonic() - first_age) >= SIGN_BATCH_AGE_SECONDS:
+                            flush_batch(buf, ul_par, ul_seq)
+                            buf, buf_bytes, first_age = [], 0, None
+                        continue
+                    buf.append(item)
+                    buf_bytes += item['size']
+                    if first_age is None:
+                        first_age = time.monotonic()
+                    if (len(buf) >= SIGN_BATCH_COUNT
+                            or buf_bytes >= SIGN_BATCH_BYTES):
+                        flush_batch(buf, ul_par, ul_seq)
+                        buf, buf_bytes, first_age = [], 0, None
+            except Exception as e:
+                logging.exception('Sign stage failed')
+                record_error(e)
+
+        def upload_worker(item):
+            if error_event.is_set():
+                return
+            mark_first('upload_first')
+            try:
+                path = item['path']
+                sha256 = hash_file(path, hash_type='sha256')
+                with packages_lock:
+                    packages[item['pkg_id']]['sha256'] = sha256
+
+                with seen_lock:
+                    is_first = sha256 not in seen_shas
+                    if is_first:
+                        seen_shas.add(sha256)
+                if not is_first:
+                    # Duplicate content; href is filled in via name lookup
+                    # after the pipeline drains.
+                    mark_last('upload_last')
+                    return
+
+                if item['is_rpm']:
+                    sign_errors = self._check_signature_single(path, pgp_keyid)
+                    if sign_errors:
+                        msg = 'Errors during checking packages signatures: \n{}'.format(
+                            '\n'.join(sign_errors)
+                        )
+                        logging.error(msg)
+                        raise SignError(msg)
+
+                result = self._upload_artifact(path)
+                with packages_lock:
+                    packages[item['pkg_id']]['href'] = result.href
+                    packages_hrefs[item['name']] = result.href
+
+                if self.__notar_enabled and item.get('cas_meta') is not None:
+                    with self.__notary_lock:
+                        cas_hash = self.__notary.notarize_artifact(
+                            path, item['cas_meta']
+                        )
+                    with packages_lock:
+                        packages[item['pkg_id']]['cas_hash'] = cas_hash
+
+                mark_last('upload_last')
+            except Exception as e:
+                logging.exception('Upload stage failed for %s', item.get('path'))
+                record_error(e)
+
+        pipeline_start = time.monotonic()
+        try:
+            with ThreadPoolExecutor(max_workers=4) as dl_pool, \
+                 ThreadPoolExecutor(max_workers=1) as sign_pool, \
+                 ThreadPoolExecutor(max_workers=4) as ul_par, \
+                 ThreadPoolExecutor(max_workers=1) as ul_seq:
+
+                sign_future = sign_pool.submit(sign_batcher, ul_par, ul_seq)
+                dl_futures = [
+                    dl_pool.submit(download_worker, p, ul_par, ul_seq)
+                    for p in task['packages']
+                ]
+                for f in as_completed(dl_futures):
+                    f.result()
+                download_done.set()
+
+                sign_future.result()
+
+                with upload_futures_lock:
+                    pending = list(upload_futures)
+                for f in as_completed(pending):
+                    f.result()
+
+            if error_event.is_set():
+                raise first_error[0]
+
+            # Fill href for packages of the same architecture (e.g. duplicates
+            # deduped by sha256 above).
             for id_, package in packages.items():
                 if not package.get('href'):
                     packages[id_]['href'] = packages_hrefs[package['name']]
             response_payload['packages'] = list(packages.values())
-            finish_time = datetime.utcnow()
-            stats['upload_packages_time'] = self.timedelta_seconds(
-                start_time, finish_time)
+
+            pipeline_end = time.monotonic()
+            if stage_times['download_first'] and stage_times['download_last']:
+                stats['download_packages_time'] = int(
+                    stage_times['download_last'] - stage_times['download_first']
+                )
+            if stage_times['sign_first'] and stage_times['sign_last']:
+                stats['sign_packages_time'] = int(
+                    stage_times['sign_last'] - stage_times['sign_first']
+                )
+            if stage_times['upload_first'] and stage_times['upload_last']:
+                stats['upload_packages_time'] = int(
+                    stage_times['upload_last'] - stage_times['upload_first']
+                )
+            stats['pipeline_total_time'] = int(pipeline_end - pipeline_start)
             response_payload['stats'] = stats
         except Exception:
             error_message = traceback.format_exc()
@@ -539,9 +664,6 @@ class Signer(object):
             self._report_signed_build(task['id'], response_payload)
             if os.path.exists(task_dir):
                 shutil.rmtree(task_dir)
-            # Explicit deletion to avoid memory leaks
-            del pkg_info_mapping
-            del pkg_verification_mapping
 
     def _report_signed_build(self, task_id, response_payload):
         """
