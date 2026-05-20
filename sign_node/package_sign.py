@@ -2,12 +2,18 @@
 RPM packages signing functions.
 """
 
+import contextlib
 import logging
 import traceback
+from typing import List, Optional
 
 import pexpect
 
-from sign_node.utils.locking import exclusive_lock
+from sign_node.utils.locking import (
+    GPG_AGENT_LOCK_FILENAME,
+    exclusive_lock,
+    shared_lock,
+)
 from sign_node.utils.pgp_utils import restart_gpg_agent
 
 __all__ = [
@@ -22,6 +28,35 @@ class PackageSignError(Exception):
     pass
 
 
+@contextlib.contextmanager
+def gpg_sign_locks(
+    keyid,
+    gpg_locks_dir,
+    yubikey_keyids,
+):
+    """
+    Acquire the locks needed for a signing operation with ``keyid``.
+
+    A shared lock on the gpg-agent file is always held during signing
+    so that no other process can restart gpg-agent mid-sign. When
+    ``keyid`` is a Yubikey-backed key, an additional per-key exclusive
+    lock serializes hardware access, and gpg-agent is reloaded (under
+    the exclusive gpg-agent lock) after the sign region exits.
+    """
+    yubikey_keyids = yubikey_keyids or []
+    is_yubikey = keyid in yubikey_keyids
+    with shared_lock(gpg_locks_dir, GPG_AGENT_LOCK_FILENAME):
+        if is_yubikey:
+            with exclusive_lock(gpg_locks_dir, keyid):
+                yield
+        else:
+            yield
+    if is_yubikey:
+        with exclusive_lock(
+            gpg_locks_dir, GPG_AGENT_LOCK_FILENAME,
+        ):
+            restart_gpg_agent()
+
 def sign_rpm_package(
     path,
     keyid,
@@ -29,6 +64,7 @@ def sign_rpm_package(
     sign_files=False,
     sign_files_cert_path='/etc/pki/ima/ima-sign.key',
     locks_dir_path: str = '/tmp/gpg_locks',
+    yubikey_keyids: Optional[List[str]] = None,
 ):
     """
     Signs an RPM package.
@@ -45,6 +81,10 @@ def sign_rpm_package(
         Flag to indicate if file signing is needed
     sign_files_cert_path : str
         Path to the certificate used for files signing
+    locks_dir_path : str
+        Path to a dir with lock files
+    yubikey_keyids: list
+        List of YubiKey IDs
 
     Raises
     ------
@@ -71,7 +111,11 @@ def sign_rpm_package(
         raise PackageSignError(
             f'Cannot delete package signature: {full_out}'
         )
-    with exclusive_lock(locks_dir_path, keyid):
+    with gpg_sign_locks(
+        keyid=keyid,
+        gpg_locks_dir=locks_dir_path,
+        yubikey_keyids=yubikey_keyids,
+    ):
         out, status = pexpect.run(
             command=final_cmd,
             events={"Enter passphrase:.*": f"{password}\r"},
@@ -79,7 +123,6 @@ def sign_rpm_package(
             timeout=100000,
             withexitstatus=True,
         )
-        restart_gpg_agent()
     if status is None:
         message = (
             f"The RPM signing command is failed with timeout."
