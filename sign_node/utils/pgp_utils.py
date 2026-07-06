@@ -112,7 +112,8 @@ class PGPPasswordDB(object):
             key_ids_from_config: list[str],
             is_community_sign_node: bool = False,
             development_mode: bool = False,
-            development_password: str = None
+            development_password: str = None,
+            preloaded_passwords: dict = None,
     ):
         """
         Password DB initialization.
@@ -123,6 +124,10 @@ class PGPPasswordDB(object):
             Gpg wrapper.
         key_ids_from_config : list of str
             List of PGP keyids from the config.
+        preloaded_passwords : dict, optional
+            Mapping of keyid to passphrase fetched ahead of time (e.g. from
+            Bitwarden). When provided, these take precedence over the
+            development password and interactive prompts.
         """
         self.__key_ids = defaultdict(dict)
         self.__key_ids_from_config = key_ids_from_config
@@ -134,6 +139,7 @@ class PGPPasswordDB(object):
                                      'mode')
         self.__development_mode = development_mode
         self.__development_password = development_password
+        self.__preloaded_passwords = preloaded_passwords or {}
 
     @property
     def key_ids(self):
@@ -175,7 +181,13 @@ class PGPPasswordDB(object):
                     "PGP key {0} is not found in the " "gnupg2 "
                     "database".format(keyid)
                 )
-            if self.__development_mode:
+            if self.__preloaded_passwords:
+                password = self.__preloaded_passwords.get(keyid)
+                if password is None:
+                    raise ConfigurationError(
+                        "no preloaded passphrase for PGP key {0}".format(keyid)
+                    )
+            elif self.__development_mode:
                 password = self.__development_password
             else:
                 password = getpass.getpass('\nPlease enter the {0} PGP key '

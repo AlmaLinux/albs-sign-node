@@ -6,3 +6,16 @@
 # the following line in case your development setup needs it.
 #   development_mode: yes
 is_community_sign_node: true
+
+# Fetch GPG key passphrases from a Bitwarden vault instead of prompting
+# interactively (or using dev_pgp_key_password). For each keyid in
+# 'pgp_keys', create a Bitwarden login item whose name equals the keyid and
+# whose password field holds the passphrase. Requires the 'bw' CLI on PATH.
+#   bitwarden_enabled: yes
+#   bitwarden_username: signer@example.com
+#   Provide the master password via a file (preferred) ...
+#   bitwarden_password_file: /run/secrets/bw_master
+#   ... or inline (less safe):
+#   bitwarden_password: "..."
+#   Optional: restrict the lookup to a single collection (real UUID only).
+#   bitwarden_collection_id: <uuid>
