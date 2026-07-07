@@ -77,6 +77,11 @@ class SignNodeConfig(BaseConfig):
             'immudb_public_key_file': None,
             'files_sign_cert_path': '/etc/pki/ima/ima-sign.key',
             'locks_dir_path': '/tmp/gpg_locks',
+            'bitwarden_enabled': False,
+            'bitwarden_username': None,
+            'bitwarden_password': None,
+            'bitwarden_password_file': None,
+            'bitwarden_collection_id': None,
         }
         schema = {
             "development_mode": {"type": "boolean", "default": False},
@@ -108,6 +113,11 @@ class SignNodeConfig(BaseConfig):
                 'coerce': normalize_path,
             },
             'locks_dir_path': {'type': 'string', 'required': True},
+            'bitwarden_enabled': {'type': 'boolean', 'default': False},
+            'bitwarden_username': {'type': 'string', 'nullable': True},
+            'bitwarden_password': {'type': 'string', 'nullable': True},
+            'bitwarden_password_file': {'type': 'string', 'nullable': True},
+            'bitwarden_collection_id': {'type': 'string', 'nullable': True},
         }
         super(SignNodeConfig, self).__init__(
             default_config, config_file, schema, **cmd_args
