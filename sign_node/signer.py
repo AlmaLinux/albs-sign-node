@@ -63,6 +63,7 @@ class Signer(object):
             self.__config.pulp_user,
             self.__config.pulp_password,
             self.__config.pulp_chunk_size,
+            upload_workers=self.__config.upload_workers,
         )
         self.__working_dir_path = Path(self.__config.working_dir)
         self.__download_credentials = {
