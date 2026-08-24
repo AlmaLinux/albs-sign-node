@@ -6,6 +6,7 @@
 import enum
 import os
 import logging
+import stat
 import pprint
 import shutil
 import glob
@@ -51,6 +52,7 @@ class SignStatusEnum(enum.IntEnum):
     READ_ERROR = 2
     NO_SIGNATURE = 3
     WRONG_SIGNATURE = 4
+    NO_FILE_SIGNATURE = 5
 
 
 class Signer(object):
@@ -183,9 +185,67 @@ class Signer(object):
                             err,
                         )
 
-    def _check_signature(self, files, key_id):
+    @staticmethod
+    def _check_file_signatures(header) -> bool:
+        """
+        Checks that every regular packaged file in an RPM header carries
+        a file (IMA) signature. Returns True for packages that have no
+        regular files to sign (e.g. metapackages containing only
+        directories or symlinks).
+        """
+        modes = header[rpm.RPMTAG_FILEMODES] or []
+        flags = header[rpm.RPMTAG_FILEFLAGS] or []
+        signatures = header[rpm.RPMTAG_FILESIGNATURES] or []
+        for idx, mode in enumerate(modes):
+            if not stat.S_ISREG(mode):
+                continue
+            # %ghost files have no payload content, nothing to sign
+            if idx < len(flags) and flags[idx] & rpm.RPMFILE_GHOST:
+                continue
+            if idx >= len(signatures) or not signatures[idx]:
+                return False
+        return True
+
+    def _files_signature_required(self, task: typing.Dict) -> bool:
+        """
+        Checks whether the task packages must carry file (IMA) signatures
+        according to the 'require_files_signature_platforms' config option.
+
+        Raises
+        ------
+        SignError
+            If the option is set but the task payload carries no platform
+            information (the web server is too old to provide it).
+        """
+        required_platforms = (
+            self.__config.require_files_signature_platforms or []
+        )
+        if not required_platforms:
+            return False
+        rpm_packages = [
+            pkg for pkg in task['packages']
+            if pkg.get('type', 'rpm') == 'rpm'
+        ]
+        missing = [
+            pkg['name'] for pkg in rpm_packages
+            if not pkg.get('platform_name')
+        ]
+        if missing:
+            raise SignError(
+                'require_files_signature_platforms is enabled, but the sign '
+                'task payload carries no platform information for the '
+                'following packages (is the web server up to date?): '
+                '{}'.format(', '.join(missing))
+            )
+        return any(
+            pkg['platform_name'] in required_platforms
+            for pkg in rpm_packages
+        )
+
+    def _check_signature(self, files, key_id, files_require_signature=None):
         errors = []
         key_id_lower = key_id.lower()
+        files_require_signature = files_require_signature or frozenset()
         ts = rpm.TransactionSet()
         ts.setVSFlags(rpm._RPMVSF_NOSIGNATURES)
         subkeys = [i.lower() for i in self.__password_db.get_subkeys(key_id)]
@@ -201,6 +261,11 @@ class Signer(object):
                     signature = header[rpm.RPMTAG_SIGPGP]
                 if not signature:
                     return SignStatusEnum.NO_SIGNATURE, ''
+                if (
+                    pkg_path in files_require_signature
+                    and not self._check_file_signatures(header)
+                ):
+                    return SignStatusEnum.NO_FILE_SIGNATURE, ''
 
             pgp_msg = pgpy.PGPMessage.from_blob(signature)
             sig = ''
@@ -228,6 +293,9 @@ class Signer(object):
                 elif result == SignStatusEnum.WRONG_SIGNATURE:
                     errors.append(f'Package {pkg_path} is signed '
                                   f'with the wrong key: {signature}')
+                elif result == SignStatusEnum.NO_FILE_SIGNATURE:
+                    errors.append(f'Package {pkg_path} does not contain '
+                                  f'file (IMA) signatures')
 
         return errors
 
@@ -387,7 +455,17 @@ class Signer(object):
 
         stats = {'sign_task_start_time': str(datetime.utcnow())}
         pgp_keyid = task['keyid']
-        sign_files = task.get('sign_files', False)
+        require_files_platforms = set(
+            self.__config.require_files_signature_platforms or []
+        )
+        files_signature_required = self._files_signature_required(task)
+        sign_files = task.get('sign_files', False) or files_signature_required
+        if files_signature_required and not task.get('sign_files', False):
+            logging.info(
+                'Forcing file signing for task %s: it contains packages of '
+                'platforms listed in require_files_signature_platforms',
+                task['id'],
+            )
         pgp_key_password = self.__password_db.get_password(pgp_keyid)
         fingerprint = self.__password_db.get_fingerprint(pgp_keyid)
         task_dir = self.__working_dir_path.joinpath(str(task['id']))
@@ -469,6 +547,8 @@ class Signer(object):
             sequential_upload_files = {}
             packages_hrefs = {}
             files_to_check = list()
+            files_require_signature = set()
+            checked_paths_by_sha = {}
             for package_id, file_name, package_path in downloaded:
                 old_meta = pkg_verification_mapping.get(package_path)
                 if self.__notar_enabled and old_meta is not None:
@@ -487,14 +567,24 @@ class Signer(object):
                             package_id, file_name, package_path)
                     files_to_upload.add(sha256)
                     files_to_check.append(package_path)
+                    checked_paths_by_sha[sha256] = package_path
                 packages[package_id]['sha256'] = sha256
+                pkg_info = packages[package_id]
+                if (pkg_info.get('type', 'rpm') == 'rpm'
+                        and pkg_info.get('platform_name')
+                        in require_files_platforms):
+                    files_require_signature.add(checked_paths_by_sha[sha256])
 
             finish_time = datetime.utcnow()
             stats['notarization_packages_time'] = self.timedelta_seconds(
                 start_time, finish_time)
             start_time = datetime.utcnow()
 
-            sign_errors = self._check_signature(files_to_check, pgp_keyid)
+            sign_errors = self._check_signature(
+                files_to_check,
+                pgp_keyid,
+                files_require_signature=files_require_signature,
+            )
             finish_time = datetime.utcnow()
             stats['signature_check_packages_time'] = self.timedelta_seconds(
                 start_time, finish_time)

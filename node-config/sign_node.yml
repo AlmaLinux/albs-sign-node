@@ -19,3 +19,11 @@ is_community_sign_node: true
 #   bitwarden_password: "..."
 #   Optional: restrict the lookup to a single collection (real UUID only).
 #   bitwarden_collection_id: <uuid>
+
+# Platforms whose packages must carry file (IMA) signatures. For sign tasks
+# touching a listed platform, file signing is forced even when the task
+# payload says otherwise, and the task fails if any signed package with
+# regular files lacks file signatures. Requires 'files_sign_cert_path' to
+# point to a provisioned IMA signing key. Absent or empty -> nothing changes.
+#   require_files_signature_platforms:
+#     - AlmaLinux-10

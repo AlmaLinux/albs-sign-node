@@ -1,12 +1,20 @@
 import os
+import stat
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
+import pytest
+import rpm
 from pyfakefs.fake_filesystem_unittest import TestCase
 
 import sign_node
 from sign_node.config import SignNodeConfig
+from sign_node.errors import SignError
 from sign_node.signer import Signer
+
+REGULAR_FILE_MODE = stat.S_IFREG | 0o644
+DIRECTORY_MODE = stat.S_IFDIR | 0o755
+SYMLINK_MODE = stat.S_IFLNK | 0o777
 
 
 class TestSigner(TestCase):
@@ -114,3 +122,159 @@ class TestSigner(TestCase):
         assert private_key.exists()
         assert public_key.open().read() == key
         assert private_key.open().read() == key
+
+
+def make_header(modes, signatures, flags=None):
+    if flags is None:
+        flags = [0] * len(modes)
+    return {
+        rpm.RPMTAG_FILEMODES: modes,
+        rpm.RPMTAG_FILEFLAGS: flags,
+        rpm.RPMTAG_FILESIGNATURES: signatures,
+    }
+
+
+class TestCheckFileSignatures:
+
+    def test_signed_regular_files(self):
+        header = make_header(
+            [REGULAR_FILE_MODE, REGULAR_FILE_MODE],
+            ['aabb', 'ccdd'],
+        )
+        assert Signer._check_file_signatures(header) is True
+
+    def test_unsigned_regular_file(self):
+        header = make_header(
+            [REGULAR_FILE_MODE, REGULAR_FILE_MODE],
+            ['aabb', ''],
+        )
+        assert Signer._check_file_signatures(header) is False
+
+    def test_no_signatures_at_all(self):
+        header = make_header([REGULAR_FILE_MODE], [])
+        assert Signer._check_file_signatures(header) is False
+        header = make_header([REGULAR_FILE_MODE], None)
+        assert Signer._check_file_signatures(header) is False
+
+    def test_metapackage_without_regular_files(self):
+        header = make_header(
+            [DIRECTORY_MODE, SYMLINK_MODE],
+            [],
+        )
+        assert Signer._check_file_signatures(header) is True
+
+    def test_empty_package(self):
+        header = make_header([], [])
+        assert Signer._check_file_signatures(header) is True
+
+    def test_unsigned_ghost_file_is_skipped(self):
+        header = make_header(
+            [REGULAR_FILE_MODE, REGULAR_FILE_MODE],
+            ['aabb', ''],
+            flags=[0, rpm.RPMFILE_GHOST],
+        )
+        assert Signer._check_file_signatures(header) is True
+
+
+class TestFilesSignatureRequired:
+
+    def make_signer(self, platforms):
+        config = SignNodeConfig(
+            require_files_signature_platforms=platforms,
+        )
+        return Signer(config, 'password', None)
+
+    def test_option_not_set(self):
+        signer = self.make_signer([])
+        task = {'packages': [{'name': 'pkg-1.rpm', 'type': 'rpm'}]}
+        assert signer._files_signature_required(task) is False
+
+    def test_platform_listed(self):
+        signer = self.make_signer(['AlmaLinux-10'])
+        task = {'packages': [
+            {
+                'name': 'pkg-1.rpm',
+                'type': 'rpm',
+                'platform_name': 'AlmaLinux-9',
+            },
+            {
+                'name': 'pkg-2.rpm',
+                'type': 'rpm',
+                'platform_name': 'AlmaLinux-10',
+            },
+        ]}
+        assert signer._files_signature_required(task) is True
+
+    def test_platform_not_listed(self):
+        signer = self.make_signer(['AlmaLinux-10'])
+        task = {'packages': [
+            {
+                'name': 'pkg-1.rpm',
+                'type': 'rpm',
+                'platform_name': 'AlmaLinux-9',
+            },
+        ]}
+        assert signer._files_signature_required(task) is False
+
+    def test_missing_platform_info(self):
+        signer = self.make_signer(['AlmaLinux-10'])
+        task = {'packages': [{'name': 'pkg-1.rpm', 'type': 'rpm'}]}
+        with pytest.raises(SignError, match='no platform information'):
+            signer._files_signature_required(task)
+
+    def test_non_rpm_packages_are_ignored(self):
+        signer = self.make_signer(['AlmaLinux-10'])
+        task = {'packages': [{'name': 'pkg_1.deb', 'type': 'deb'}]}
+        assert signer._files_signature_required(task) is False
+
+
+class TestCheckSignatureFileSignatures(TestCase):
+
+    def setUp(self):
+        self.setUpPyfakefs()
+        self.config = SignNodeConfig()
+        password_db = MagicMock()
+        password_db.get_subkeys.return_value = []
+        self.signer = Signer(self.config, password_db, None)
+
+    def run_check(self, header, require_file_signature):
+        pkg_path = '/pkg/test-package.rpm'
+        self.fs.create_file(pkg_path)
+        header = dict(header)
+        header.setdefault(rpm.RPMTAG_SIGGPG, b'fake-signature')
+        ts = MagicMock()
+        ts.hdrFromFdno.return_value = header
+        pgp_msg = MagicMock()
+        signature = MagicMock()
+        signature.signer = 'aabbccdd11223344'
+        pgp_msg.signatures = [signature]
+        with (
+            patch('sign_node.signer.rpm.TransactionSet', return_value=ts),
+            patch(
+                'sign_node.signer.pgpy.PGPMessage.from_blob',
+                return_value=pgp_msg,
+            ),
+        ):
+            return self.signer._check_signature(
+                [pkg_path],
+                'AABBCCDD11223344',
+                files_require_signature=(
+                    {pkg_path} if require_file_signature else None
+                ),
+            )
+
+    def test_missing_file_signatures_reported(self):
+        header = make_header([REGULAR_FILE_MODE], [])
+        errors = self.run_check(header, require_file_signature=True)
+        assert len(errors) == 1
+        assert 'does not contain file (IMA) signatures' in errors[0]
+
+    def test_present_file_signatures_pass(self):
+        header = make_header([REGULAR_FILE_MODE], ['aabb'])
+        errors = self.run_check(header, require_file_signature=True)
+        assert errors == []
+
+    def test_file_signatures_not_required(self):
+        header = make_header([REGULAR_FILE_MODE], [])
+        errors = self.run_check(header, require_file_signature=False)
+        assert errors == []

@@ -76,6 +76,7 @@ class SignNodeConfig(BaseConfig):
             'immudb_address': None,
             'immudb_public_key_file': None,
             'files_sign_cert_path': '/etc/pki/ima/ima-sign.key',
+            'require_files_signature_platforms': [],
             'locks_dir_path': '/tmp/gpg_locks',
             'bitwarden_enabled': False,
             'bitwarden_username': None,
@@ -111,6 +112,10 @@ class SignNodeConfig(BaseConfig):
             'files_sign_cert_path': {
                 'type': 'string', 'required': False,
                 'coerce': normalize_path,
+            },
+            'require_files_signature_platforms': {
+                'type': 'list', 'required': False,
+                'schema': {'type': 'string'},
             },
             'locks_dir_path': {'type': 'string', 'required': True},
             'bitwarden_enabled': {'type': 'boolean', 'default': False},
