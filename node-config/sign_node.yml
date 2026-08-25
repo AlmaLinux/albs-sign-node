@@ -19,3 +19,29 @@ is_community_sign_node: true
 #   bitwarden_password: "..."
 #   Optional: restrict the lookup to a single collection (real UUID only).
 #   bitwarden_collection_id: <uuid>
+
+# Alternatively, fetch the passphrases from a HashiCorp Vault KV v2 store.
+# For each keyid in 'pgp_keys', create a secret at
+# '<vault_mount>/<vault_path_prefix>/<keyid>' holding the passphrase in the
+# 'passphrase' field:
+#   vault kv put secret/albs/sign-keys/<keyid> passphrase='...'
+# Only one secret provider may be enabled at a time: switching this on while
+# 'bitwarden_enabled' is also set is a configuration error.
+#   vault_enabled: yes
+#   vault_addr: https://vault.example.com:8200
+#   vault_mount: secret
+#   vault_path_prefix: albs/sign-keys
+#   Authenticate with a static token from a file (preferred) ...
+#   vault_token_file: /run/secrets/vault_token
+#   ... or inline (less safe):
+#   vault_token: "..."
+#   ... or via AppRole:
+#   vault_role_id: <uuid>
+#   vault_secret_id_file: /run/secrets/vault_secret_id
+#   VAULT_ADDR and VAULT_TOKEN from the environment are used as a fallback,
+#   so a host running a Vault agent needs no credentials here.
+#   Optional: Vault Enterprise / HCP namespace, custom CA bundle, and a
+#   different field name for an existing secret layout.
+#   vault_namespace: admin/albs
+#   vault_ca_cert: /etc/pki/vault-ca.pem
+#   vault_passphrase_field: passphrase
