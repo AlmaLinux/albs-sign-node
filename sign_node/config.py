@@ -8,6 +8,8 @@ CloudLinux Build System builds sign node configuration storage.
 
 from .utils.config import BaseConfig
 from .utils.file_utils import normalize_path
+from .utils.vault import DEFAULT_FIELD as DEFAULT_VAULT_FIELD
+from .utils.vault import DEFAULT_MOUNT as DEFAULT_VAULT_MOUNT
 
 __all__ = ["SignNodeConfig"]
 
@@ -82,6 +84,18 @@ class SignNodeConfig(BaseConfig):
             'bitwarden_password': None,
             'bitwarden_password_file': None,
             'bitwarden_collection_id': None,
+            'vault_enabled': False,
+            'vault_addr': None,
+            'vault_token': None,
+            'vault_token_file': None,
+            'vault_role_id': None,
+            'vault_secret_id': None,
+            'vault_secret_id_file': None,
+            'vault_namespace': None,
+            'vault_mount': DEFAULT_VAULT_MOUNT,
+            'vault_path_prefix': '',
+            'vault_passphrase_field': DEFAULT_VAULT_FIELD,
+            'vault_ca_cert': None,
         }
         schema = {
             "development_mode": {"type": "boolean", "default": False},
@@ -118,6 +132,26 @@ class SignNodeConfig(BaseConfig):
             'bitwarden_password': {'type': 'string', 'nullable': True},
             'bitwarden_password_file': {'type': 'string', 'nullable': True},
             'bitwarden_collection_id': {'type': 'string', 'nullable': True},
+            'vault_enabled': {'type': 'boolean', 'default': False},
+            'vault_addr': {'type': 'string', 'nullable': True},
+            'vault_token': {'type': 'string', 'nullable': True},
+            'vault_token_file': {'type': 'string', 'nullable': True},
+            'vault_role_id': {'type': 'string', 'nullable': True},
+            'vault_secret_id': {'type': 'string', 'nullable': True},
+            'vault_secret_id_file': {'type': 'string', 'nullable': True},
+            'vault_namespace': {'type': 'string', 'nullable': True},
+            'vault_mount': {
+                'type': 'string',
+                'default': DEFAULT_VAULT_MOUNT,
+                'empty': False,
+            },
+            'vault_path_prefix': {'type': 'string', 'nullable': True},
+            'vault_passphrase_field': {
+                'type': 'string',
+                'default': DEFAULT_VAULT_FIELD,
+                'empty': False,
+            },
+            'vault_ca_cert': {'type': 'string', 'nullable': True},
         }
         super(SignNodeConfig, self).__init__(
             default_config, config_file, schema, **cmd_args

@@ -16,10 +16,10 @@ import sentry_sdk
 from sign_node.config import SignNodeConfig
 from sign_node.errors import ConfigurationError
 from sign_node.signer import Signer
-from sign_node.utils.bitwarden import fetch_passphrases
 from sign_node.utils.config import locate_config_file
 from sign_node.utils.file_utils import clean_dir, safe_mkdir
 from sign_node.utils.pgp_utils import PGPPasswordDB, init_gpg
+from sign_node.utils.secrets import resolve_passphrases
 
 
 def init_arg_parser():
@@ -78,18 +78,10 @@ def main():
 
     init_sentry(config)
     gpg = init_gpg()
-    preloaded_passwords = None
-    if config.bitwarden_enabled:
-        try:
-            preloaded_passwords = fetch_passphrases(
-                keyids=config.pgp_keys,
-                username=config.bitwarden_username,
-                password=config.bitwarden_password,
-                password_file=config.bitwarden_password_file,
-                collection_id=config.bitwarden_collection_id,
-            )
-        except ConfigurationError as e:
-            args_parser.error(str(e))
+    try:
+        preloaded_passwords = resolve_passphrases(config)
+    except ConfigurationError as e:
+        args_parser.error(str(e))
     password_db = PGPPasswordDB(
         gpg,
         key_ids_from_config=config.pgp_keys.copy(),
