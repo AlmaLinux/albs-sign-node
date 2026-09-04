@@ -458,14 +458,7 @@ class Signer(object):
         require_files_platforms = set(
             self.__config.require_files_signature_platforms or []
         )
-        files_signature_required = self._files_signature_required(task)
-        sign_files = task.get('sign_files', False) or files_signature_required
-        if files_signature_required and not task.get('sign_files', False):
-            logging.info(
-                'Forcing file signing for task %s: it contains packages of '
-                'platforms listed in require_files_signature_platforms',
-                task['id'],
-            )
+        sign_files = task.get('sign_files', False)
         pgp_key_password = self.__password_db.get_password(pgp_keyid)
         fingerprint = self.__password_db.get_fingerprint(pgp_keyid)
         task_dir = self.__working_dir_path.joinpath(str(task['id']))
@@ -485,6 +478,22 @@ class Signer(object):
                 break
 
         try:
+            # A task for a platform that requires file signatures must have
+            # been created with 'sign_files' enabled, otherwise it would
+            # silently produce packages without them. Checked inside the
+            # 'try' block so the failure is reported back to the web server
+            # instead of leaving the task in the 'in progress' state.
+            if self._files_signature_required(task) and not sign_files:
+                matched = sorted({
+                    pkg['platform_name'] for pkg in task['packages']
+                    if pkg.get('type', 'rpm') == 'rpm'
+                    and pkg.get('platform_name') in require_files_platforms
+                })
+                raise SignError(
+                    f'Task {task["id"]}: platform(s) {", ".join(matched)} '
+                    f'require file (IMA) signatures, but the sign task was '
+                    f'created with sign_files=false'
+                )
             with ThreadPoolExecutor(max_workers=4) as executor:
                 futures = [executor.submit(download_package, package)
                            for package in task['packages']]

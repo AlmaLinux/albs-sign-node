@@ -278,3 +278,82 @@ class TestCheckSignatureFileSignatures(TestCase):
         header = make_header([REGULAR_FILE_MODE], [])
         errors = self.run_check(header, require_file_signature=False)
         assert errors == []
+
+
+class TestSignBuildFilesSignatureGuard(TestCase):
+    """
+    The guard must fail the sign task *and report the failure*, so it has
+    to run inside the '_sign_build' try block.
+    """
+
+    def setUp(self):
+        self.setUpPyfakefs()
+        self.config = SignNodeConfig(
+            require_files_signature_platforms=['AlmaLinux-10'],
+        )
+        self.signer = Signer(self.config, MagicMock(), None)
+
+    @staticmethod
+    def make_task(sign_files, platform_name='AlmaLinux-10'):
+        package = {
+            'id': 1,
+            'name': 'pkg-1.el10.x86_64.rpm',
+            'type': 'rpm',
+            'arch': 'x86_64',
+            'download_url': 'http://pulp/pkg-1.el10.x86_64.rpm',
+        }
+        if platform_name is not None:
+            package['platform_name'] = platform_name
+        return {
+            'id': 6,
+            'build_id': 14,
+            'keyid': 'AABBCCDD11223344',
+            'sign_files': sign_files,
+            'packages': [package],
+        }
+
+    def run_sign_build(self, task):
+        with (
+            patch.object(Signer, '_report_signed_build') as report,
+            patch.object(
+                Signer,
+                '_download_package',
+                side_effect=RuntimeError('download reached'),
+            ) as download,
+        ):
+            self.signer._sign_build(task)
+        assert report.call_count == 1
+        task_id, payload = report.call_args[0]
+        return task_id, payload, download
+
+    def test_required_platform_without_sign_files_fails_task(self):
+        task_id, payload, download = self.run_sign_build(self.make_task(False))
+
+        assert task_id == 6
+        assert payload['success'] is False
+        assert 'sign_files=false' in payload['error_message']
+        assert 'AlmaLinux-10' in payload['error_message']
+        download.assert_not_called()
+
+    def test_missing_platform_info_fails_task(self):
+        _, payload, download = self.run_sign_build(
+            self.make_task(False, platform_name=None)
+        )
+
+        assert payload['success'] is False
+        assert 'no platform information' in payload['error_message']
+        download.assert_not_called()
+
+    def test_unlisted_platform_is_not_blocked(self):
+        _, payload, download = self.run_sign_build(
+            self.make_task(False, platform_name='AlmaLinux-9')
+        )
+
+        assert 'sign_files=false' not in payload['error_message']
+        download.assert_called()
+
+    def test_sign_files_enabled_is_not_blocked(self):
+        _, payload, download = self.run_sign_build(self.make_task(True))
+
+        assert 'sign_files=false' not in payload['error_message']
+        download.assert_called()
