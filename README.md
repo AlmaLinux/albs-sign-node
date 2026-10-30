@@ -28,6 +28,25 @@ Pre-requisites:
 
 To start the system, run the following command: `docker compose up -d`. To rebuild images after your local changes, just run `docker compose up -d --build`.
 
+# RPM signing workers
+
+RPM packages are signed in two overlapping phases. Preparation threads
+delete the old signatures and add the IMA file signatures (with a
+throwaway software key, because `rpmsign` cannot add file signatures
+without a PGP signature); then each prepared package is re-signed with
+the real key. This keeps a slow hardware key (YubiKey) busy while other
+packages are still being hashed. Tune it in the node config
+(`sign_node.yml`):
+
+```yaml
+# Packages signed with the real key at the same time. One is enough for a
+# software key; two lets one rpmsign hash a big package while the other
+# one waits for the YubiKey.
+sign_key_workers: 2
+# Preparation threads, defaults to the CPU count.
+# sign_prepare_workers: 8
+```
+
 # Fetching GPG passphrases from Bitwarden
 
 By default the sign node asks for each PGP key passphrase interactively at
