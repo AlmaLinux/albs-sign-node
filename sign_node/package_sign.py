@@ -211,6 +211,8 @@ def _sign_with_throwaway_key(
             path,
         ],
         retcode=None,
+        # rpmsign warns when GPG_TTY is unset and stdin is not a terminal
+        env={'GPG_TTY': os.environ.get('GPG_TTY', '/dev/null')},
     )
     logging.debug('Command result: %d, %s\n%s', code, out, err)
     if code != 0:
