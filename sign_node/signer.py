@@ -40,7 +40,7 @@ from sign_node.utils.file_utils import (
 )
 from sign_node.utils.codenotary import Codenotary
 from sign_node.uploaders.pulp import PulpRpmUploader
-from sign_node.package_sign import sign_rpm_package
+from sign_node.package_sign import sign_rpm_packages
 
 
 __all__ = ['Signer']
@@ -434,30 +434,17 @@ class Signer(object):
                 start_time, finish_time)
             start_time = datetime.utcnow()
             if has_rpms:
-                packages_to_sign = []
-                for package in glob.glob(os.path.join(rpms_dir, '*/*.rpm')):
-                    packages_to_sign.append(package)
-                    if len(packages_to_sign) % 50 == 0:
-                        sign_rpm_package(
-                            ' '.join(packages_to_sign),
-                            pgp_keyid,
-                            pgp_key_password,
-                            sign_files=sign_files,
-                            sign_files_cert_path=self.__config.files_sign_cert_path,
-                            locks_dir_path=self.__config.locks_dir_path,
-                            yubikey_keyids=self.__config.yubikey_keyids,
-                        )
-                        packages_to_sign = []
-                if packages_to_sign:
-                    sign_rpm_package(
-                        ' '.join(packages_to_sign),
-                        pgp_keyid,
-                        pgp_key_password,
-                        sign_files=sign_files,
-                        sign_files_cert_path=self.__config.files_sign_cert_path,
-                        locks_dir_path=self.__config.locks_dir_path,
-                        yubikey_keyids=self.__config.yubikey_keyids,
-                    )
+                sign_rpm_packages(
+                    glob.glob(os.path.join(rpms_dir, '*/*.rpm')),
+                    pgp_keyid,
+                    pgp_key_password,
+                    sign_files=sign_files,
+                    sign_files_cert_path=self.__config.files_sign_cert_path,
+                    locks_dir_path=self.__config.locks_dir_path,
+                    yubikey_keyids=self.__config.yubikey_keyids,
+                    key_workers=self.__config.sign_key_workers,
+                    prepare_workers=self.__config.sign_prepare_workers,
+                )
             finish_time = datetime.utcnow()
             stats['sign_packages_time'] = self.timedelta_seconds(
                 start_time, finish_time)
