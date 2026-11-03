@@ -80,6 +80,7 @@ class SignNodeConfig(BaseConfig):
             'locks_dir_path': '/tmp/gpg_locks',
             'sign_key_workers': 2,
             'sign_prepare_workers': None,
+            'notarization_workers': 8,
             'bitwarden_enabled': False,
             'bitwarden_username': None,
             'bitwarden_password': None,
@@ -124,6 +125,7 @@ class SignNodeConfig(BaseConfig):
             'sign_prepare_workers': {
                 'type': 'integer', 'min': 1, 'nullable': True,
             },
+            'notarization_workers': {'type': 'integer', 'min': 1},
             'bitwarden_enabled': {'type': 'boolean', 'default': False},
             'bitwarden_username': {'type': 'string', 'nullable': True},
             'bitwarden_password': {'type': 'string', 'nullable': True},

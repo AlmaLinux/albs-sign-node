@@ -45,6 +45,9 @@ packages are still being hashed. Tune it in the node config
 sign_key_workers: 2
 # Preparation threads, defaults to the CPU count.
 # sign_prepare_workers: 8
+# Threads notarizing signed packages in immudb. Each call is a few network
+# round trips, so this is bound by latency to immudb, not by CPU.
+notarization_workers: 8
 ```
 
 # Fetching GPG passphrases from Bitwarden

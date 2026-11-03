@@ -437,9 +437,6 @@ class Signer(object):
             Sign task.
         """
 
-        # We will need this one to map downloaded packages to the package info
-        # from the task payload
-        pkg_info_mapping = {}
         pkg_verification_mapping = {}
 
         def download_package(pkg: dict):
@@ -449,8 +446,11 @@ class Signer(object):
             else:
                 download_dir = rpms_dir
             pkg_path = self._download_package(download_dir, pkg)
-
-            pkg_info_mapping[pkg_path] = pkg
+            if self.__notar_enabled and pkg.get('cas_hash'):
+                verification = self.__notary.verify_artifact(pkg_path)
+                if not verification:
+                    raise SignError(f'Package {pkg} cannot be verified')
+                pkg_verification_mapping[pkg_path] = verification
             return pkg, (pkg['id'], pkg['name'], pkg_path)
 
         stats = {'sign_task_start_time': str(datetime.utcnow())}
@@ -505,16 +505,6 @@ class Signer(object):
                     signed_package.pop('download_url')
                     packages[package['id']] = signed_package
                     downloaded.append(downloaded_info)
-            # Since grpcio library used in immudb client is not thread-safe,
-            # we move its usage outside the multithreaded workflow
-            for pkg_path, pkg_info in pkg_info_mapping.items():
-                if self.__notar_enabled and pkg_info.get('cas_hash'):
-                    verification = self.__notary.verify_artifact(pkg_path)
-                    if not verification:
-                        raise SignError(
-                            f'Package {pkg_info} cannot be verified'
-                        )
-                    pkg_verification_mapping[pkg_path] = verification
 
             finish_time = datetime.utcnow()
             stats['download_packages_time'] = self.timedelta_seconds(
@@ -545,14 +535,29 @@ class Signer(object):
             files_to_check = list()
             files_require_signature = set()
             checked_paths_by_sha = {}
-            for package_id, file_name, package_path in downloaded:
+
+            def notarize_package(package_id, file_name, package_path):
                 old_meta = pkg_verification_mapping.get(package_path)
                 if self.__notar_enabled and old_meta is not None:
                     cas_hash = self.__notary.notarize_artifact(
                         package_path, old_meta
                     )
                     packages[package_id]['cas_hash'] = cas_hash
+                    if cas_hash:
+                        # the notarized hash is the file's sha256 already
+                        return package_id, file_name, package_path, cas_hash
                 sha256 = hash_file(package_path, hash_type='sha256')
+                return package_id, file_name, package_path, sha256
+
+            # Every immudb call is a handful of round trips, run them in
+            # parallel; each thread uses its own immudb client
+            with ThreadPoolExecutor(
+                max_workers=self.__config.notarization_workers
+            ) as executor:
+                notarized = list(executor.map(
+                    lambda item: notarize_package(*item), downloaded
+                ))
+            for package_id, file_name, package_path, sha256 in notarized:
                 if sha256 not in files_to_upload:
                     if (os.stat(package_path).st_size <=
                             self.__config.parallel_upload_file_size):
@@ -628,7 +633,6 @@ class Signer(object):
             if os.path.exists(task_dir):
                 shutil.rmtree(task_dir)
             # Explicit deletion to avoid memory leaks
-            del pkg_info_mapping
             del pkg_verification_mapping
 
     def _report_signed_build(self, task_id, response_payload):
