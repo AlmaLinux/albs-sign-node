@@ -13,6 +13,11 @@ class TestSigner(TestCase):
 
     def setUp(self):
         self.setUpPyfakefs()
+        session_patcher = patch('sign_node.uploaders.pulp.PulpSession')
+        self.session = session_patcher.start().return_value
+        self.addCleanup(session_patcher.stop)
+        # authenticate() must return the client it was given
+        self.session.authenticate.side_effect = lambda client: client
         self.config = SignNodeConfig()
         self.signer = Signer(self.config, 'password', None)
 
@@ -23,11 +28,7 @@ class TestSigner(TestCase):
         gpg = MagicMock()
         gpg.__getitem__.return_value = gpg
         gpg.run.side_effect = gpg.side_effect = (
-            (
-                0,
-                '',
-                f'gpg: key {key} marked as ultimately trusted'
-            ),
+            (0, '', f'gpg: key {key} marked as ultimately trusted'),
             (
                 0,
                 'pub   rsa4096 2024-05-12 [C] [expires: 2024-12-12]\n'
@@ -68,11 +69,7 @@ class TestSigner(TestCase):
         gpg = MagicMock()
         gpg.__getitem__.return_value = gpg
         gpg.run.side_effect = gpg.side_effect = (
-            (
-                0,
-                '',
-                f'gpg: key {key} marked as ultimately trusted'
-            ),
+            (0, '', f'gpg: key {key} marked as ultimately trusted'),
             (
                 0,
                 'pub   rsa4096 2024-05-12 [C] [expires: 2024-12-12]\n'
@@ -84,20 +81,17 @@ class TestSigner(TestCase):
         )
 
         with (
-            patch(
-                'sign_node.signer.plumbum.local',
-                new={'gpg': gpg}
-            ),
+            patch('sign_node.signer.plumbum.local', new={'gpg': gpg}),
             patch.object(
                 sign_node.signer.PulpRpmUploader,
                 '_send_file',
-                return_value=('file_sha256', 'artifact_href')
+                return_value=('file_sha256', 'artifact_href'),
             ),
             patch.object(
                 sign_node.signer.Signer,
                 '_Signer__call_master',
-                return_value={'success': True}
-            )
+                return_value={'success': True},
+            ),
         ):
             self.signer.generate_sign_key({
                 'id': 'task_1',
@@ -108,7 +102,9 @@ class TestSigner(TestCase):
 
         work_dir = Path(self.config.working_dir)
         public_key = work_dir.joinpath('gen_key_task_1', f'{key}_public.key')
-        private_key = work_dir.joinpath('community_keys_backups', f'{key}_private.key')
+        private_key = work_dir.joinpath(
+            'community_keys_backups', f'{key}_private.key'
+        )
 
         assert public_key.exists()
         assert private_key.exists()
