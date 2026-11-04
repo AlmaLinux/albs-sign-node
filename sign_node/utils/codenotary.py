@@ -1,3 +1,4 @@
+import threading
 from typing import Optional
 
 from immudb_wrapper import ImmudbWrapper
@@ -12,13 +13,24 @@ class Codenotary:
         immudb_address: Optional[str] = None,
         immudb_public_key_file: Optional[str] = None,
     ):
-        self.wrapper = ImmudbWrapper(
-            username=immudb_username,
-            password=immudb_password,
-            database=immudb_database,
-            immudb_address=immudb_address,
-            public_key_file=immudb_public_key_file,
-        )
+        self._wrapper_kwargs = {
+            'username': immudb_username,
+            'password': immudb_password,
+            'database': immudb_database,
+            'immudb_address': immudb_address,
+            'public_key_file': immudb_public_key_file,
+        }
+        # An immudb client keeps per-connection state (auth stub, last
+        # verified server state), so every thread gets its own one
+        self._local = threading.local()
+        # fail early on bad settings
+        self._local.wrapper = ImmudbWrapper(**self._wrapper_kwargs)
+
+    @property
+    def wrapper(self) -> ImmudbWrapper:
+        if not hasattr(self._local, 'wrapper'):
+            self._local.wrapper = ImmudbWrapper(**self._wrapper_kwargs)
+        return self._local.wrapper
 
     def verify_artifact(self, package_path: str) -> dict:
         result = self.wrapper.authenticate_file(package_path)
