@@ -17,15 +17,19 @@ DIRECTORY_MODE = stat.S_IFDIR | 0o755
 SYMLINK_MODE = stat.S_IFLNK | 0o777
 
 
+@pytest.fixture(autouse=True)
+def pulp_session():
+    # Signer() logs in to Pulp, keep the tests offline
+    with patch('sign_node.uploaders.pulp.PulpSession') as session:
+        # authenticate() must return the client it was given
+        session.return_value.authenticate.side_effect = lambda client: client
+        yield session
+
+
 class TestSigner(TestCase):
 
     def setUp(self):
         self.setUpPyfakefs()
-        session_patcher = patch('sign_node.uploaders.pulp.PulpSession')
-        self.session = session_patcher.start().return_value
-        self.addCleanup(session_patcher.stop)
-        # authenticate() must return the client it was given
-        self.session.authenticate.side_effect = lambda client: client
         self.config = SignNodeConfig()
         self.signer = Signer(self.config, 'password', None)
 
