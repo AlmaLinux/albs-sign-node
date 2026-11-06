@@ -412,6 +412,7 @@ class Signer(object):
             'Upload public PGP key for UID "%s" to Pulp',
             sign_key_uid,
         )
+        self.__pulp_uploader.reset_connections()
         artifact = self.__pulp_uploader.upload_single_file(
             filename=str(public_key_file_path),
             artifact_type='public_pgp_key',
@@ -603,6 +604,8 @@ class Signer(object):
                 raise SignError(error_message)
 
             start_time = datetime.utcnow()
+            # The connections have been idle since the previous task
+            self.__pulp_uploader.reset_connections()
             with ThreadPoolExecutor(max_workers=4) as executor:
                 futures = {
                     executor.submit(
