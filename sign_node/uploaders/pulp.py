@@ -18,6 +18,8 @@ from pulpcore.client.pulpcore.exceptions import ApiException
 from pulpcore.client.pulpcore.api.tasks_api import TasksApi
 from pulpcore.client.pulpcore.api.uploads_api import UploadsApi
 from pulpcore.client.pulpcore.api.artifacts_api import ArtifactsApi
+from urllib3.exceptions import HTTPError
+from urllib3.util.retry import Retry
 
 from sign_node.uploaders.base import BaseUploader, UploadError
 from sign_node.uploaders.pulp_session import PulpSession
@@ -25,6 +27,15 @@ from sign_node.utils.file_utils import hash_file
 from sign_node.models import Artifact
 
 __all__ = ["PulpBaseUploader", "PulpRpmUploader"]
+
+DEFAULT_TIMEOUT = 45  # seconds
+DEFAULT_UPLOAD_RETRIES = 3
+UPLOAD_RETRY_DELAY = 10  # seconds, multiplied by the attempt number
+# No transport retries: urllib3 would re-send a PUT chunk after a read
+# timeout, and Pulp appends it a second time; a failed file is started
+# over in upload_single_file() instead. A Retry instance rather than
+# False, which urllib3 converts (and logs) on every request.
+NO_RETRIES = Retry(total=False, redirect=0)
 
 
 class TaskFailedError(Exception):
@@ -37,7 +48,13 @@ class PulpBaseUploader(BaseUploader):
     """
 
     def __init__(
-        self, host: str, username: str, password: str, chunk_size: int
+        self,
+        host: str,
+        username: str,
+        password: str,
+        chunk_size: int,
+        requests_timeout: int = DEFAULT_TIMEOUT,
+        upload_retries: int = DEFAULT_UPLOAD_RETRIES,
     ):
         """
         Initiate uploader.
@@ -52,8 +69,17 @@ class PulpBaseUploader(BaseUploader):
             User password.
         chunk_size : int
             Size of chunk to split files during the upload.
+        requests_timeout : int
+            Timeout of every request to Pulp, in seconds.
+        upload_retries : int
+            How many times a file upload is started over after a
+            connection error, a timeout or a server error.
         """
-        self._session = PulpSession(host, username, password)
+        self._requests_timeout = requests_timeout
+        self._upload_retries = upload_retries
+        self._session = PulpSession(
+            host, username, password, requests_timeout=requests_timeout
+        )
         api_client = self._prepare_api_client(host)
         self._uploads_client = UploadsApi(api_client=api_client)
         self._tasks_client = TasksApi(api_client=api_client)
@@ -75,7 +101,7 @@ class PulpBaseUploader(BaseUploader):
 
         """
         # No username/password, otherwise the client sends Basic auth
-        api_configuration = Configuration(host=host)
+        api_configuration = Configuration(host=host, retries=NO_RETRIES)
         return self._session.authenticate(
             ApiClient(configuration=api_configuration)
         )
@@ -93,12 +119,16 @@ class PulpBaseUploader(BaseUploader):
             Task final state
 
         """
-        result = self._tasks_client.read(task_href)
+        result = self._tasks_client.read(
+            task_href, _request_timeout=self._requests_timeout
+        )
         delay = 0.3
         while result.state not in ("failed", "completed"):
             time.sleep(delay)
             delay = min(delay * 2, 5)
-            result = self._tasks_client.read(task_href)
+            result = self._tasks_client.read(
+                task_href, _request_timeout=self._requests_timeout
+            )
         if result.state == "failed":
             raise TaskFailedError(
                 f"task {task_href} has failed, " f"details: {result}"
@@ -120,7 +150,9 @@ class PulpBaseUploader(BaseUploader):
 
         """
         file_size = os.path.getsize(file_path)
-        response = self._uploads_client.create({"size": file_size})
+        response = self._uploads_client.create(
+            {"size": file_size}, _request_timeout=self._requests_timeout
+        )
         return response.pulp_href, file_size
 
     def _commit_upload(self, reference: str, file_sha256: str) -> str:
@@ -142,7 +174,9 @@ class PulpBaseUploader(BaseUploader):
 
         """
         response = self._uploads_client.commit(
-            reference, {"sha256": file_sha256}
+            reference,
+            {"sha256": file_sha256},
+            _request_timeout=self._requests_timeout,
         )
         task_result = self._wait_for_task_completion(response.task)
         return task_result.created_resources[0]
@@ -166,6 +200,7 @@ class PulpBaseUploader(BaseUploader):
                     f'{total_size}',
                     reference,
                     split_file_path,
+                    _request_timeout=self._requests_timeout,
                 )
                 lower_bytes_limit += int(meta['filesize'])
         finally:
@@ -182,13 +217,18 @@ class PulpBaseUploader(BaseUploader):
             self._put_large_file(file_path, reference)
         else:
             self._uploads_client.update(
-                f"bytes 0-{file_size - 1}/{file_size}", reference, file_path
+                f"bytes 0-{file_size - 1}/{file_size}",
+                reference,
+                file_path,
+                _request_timeout=self._requests_timeout,
             )
         artifact_href = self._commit_upload(reference, file_sha256)
         return file_sha256, artifact_href
 
     def check_if_artifact_exists(self, sha256: str) -> str:
-        response = self._artifacts_client.list(sha256=sha256)
+        response = self._artifacts_client.list(
+            sha256=sha256, _request_timeout=self._requests_timeout
+        )
         if response.results:
             return response.results[0].pulp_href
 
@@ -240,15 +280,39 @@ class PulpBaseUploader(BaseUploader):
         -------
         Artifact
         """
-        try:
-            file_sha256, reference = self._send_file(filename)
-        except (ApiException, RpmApiException) as e:
-            if e.status not in (401, 403):
-                raise
-            # The session has expired (after 2 weeks by default),
-            # log in again and retry once
-            self._session.login()
-            file_sha256, reference = self._send_file(filename)
+        for attempt in range(1, self._upload_retries + 2):
+            try:
+                file_sha256, reference = self._send_file(filename)
+                break
+            except (ApiException, RpmApiException) as e:
+                if e.status in (401, 403):
+                    # The session has expired (after 2 weeks by default),
+                    # log in again and retry once
+                    self._session.login()
+                    file_sha256, reference = self._send_file(filename)
+                    break
+                # Status 0 is an SSL error from the client
+                if 0 < e.status < 500 or attempt > self._upload_retries:
+                    raise
+                error = e
+            except HTTPError as e:
+                # urllib3: no connection, timeout, connection reset
+                if attempt > self._upload_retries:
+                    raise
+                error = e
+            # Start the file over: Pulp returns what the earlier attempt
+            # managed to create (artifacts are looked up by checksum,
+            # packages by pkgId), so nothing is uploaded twice
+            delay = UPLOAD_RETRY_DELAY * attempt
+            self._logger.warning(
+                "Cannot upload %s (attempt %d of %d), retrying in %d s: %s",
+                filename,
+                attempt,
+                self._upload_retries + 1,
+                delay,
+                error,
+            )
+            time.sleep(delay)
         if artifact_type is None:
             artifact_type = 'rpm' if filename.endswith('.rpm') else 'build_log'
         return Artifact(
@@ -261,11 +325,18 @@ class PulpBaseUploader(BaseUploader):
 
 class PulpRpmUploader(PulpBaseUploader):
     def __init__(
-        self, host: str, username: str, password: str, chunk_size: int
+        self,
+        host: str,
+        username: str,
+        password: str,
+        chunk_size: int,
+        **kwargs,
     ):
-        super().__init__(host, username, password, chunk_size)
+        super().__init__(host, username, password, chunk_size, **kwargs)
         rpm_api_client = self._session.authenticate(
-            RpmApiClient(configuration=RpmConfiguration(host=host))
+            RpmApiClient(
+                configuration=RpmConfiguration(host=host, retries=NO_RETRIES)
+            )
         )
         self._packages_client = ContentPackagesApi(api_client=rpm_api_client)
 
@@ -290,7 +361,9 @@ class PulpRpmUploader(PulpBaseUploader):
         if os.path.getsize(file_path) > self._chunk_size:
             package = self._post_rpm_chunked(file_path)
         else:
-            package = self._packages_client.upload(file=file_path)
+            package = self._packages_client.upload(
+                file=file_path, _request_timeout=self._requests_timeout
+            )
 
         if package.sha256 != file_sha256:
             raise UploadError(
@@ -312,12 +385,16 @@ class PulpRpmUploader(PulpBaseUploader):
         upload_href, _ = self._create_upload(file_path)
         try:
             self._put_large_file(file_path, upload_href)
-            return self._packages_client.upload(upload=upload_href)
+            return self._packages_client.upload(
+                upload=upload_href, _request_timeout=self._requests_timeout
+            )
         finally:
             # Unlike the commit task, the synchronous endpoint keeps
             # the upload and its chunks, so remove them ourselves
             try:
-                self._uploads_client.delete(upload_href)
+                self._uploads_client.delete(
+                    upload_href, _request_timeout=self._requests_timeout
+                )
             except Exception as e:
                 self._logger.warning(
                     "Cannot delete upload %s: %s", upload_href, e

@@ -50,6 +50,17 @@ sign_key_workers: 2
 notarization_workers: 8
 ```
 
+# Uploads to Pulp
+
+```yaml
+# Timeout of every request to Pulp, in seconds. Without one a dropped
+# connection blocks the upload, and the whole node, forever.
+pulp_timeout: 45
+# How many times a file upload is started over after a connection error,
+# a timeout or a 5xx response from Pulp.
+pulp_upload_retries: 3
+```
+
 # Fetching GPG passphrases from Bitwarden
 
 By default the sign node asks for each PGP key passphrase interactively at

@@ -5,6 +5,7 @@ from unittest.mock import Mock, patch
 from pulpcore.client.pulp_rpm.exceptions import ApiException as RpmApiException
 from pulpcore.client.pulpcore.exceptions import ApiException
 from pyfakefs.fake_filesystem_unittest import TestCase
+from urllib3.exceptions import ProtocolError, ReadTimeoutError
 
 from sign_node.models import Artifact
 from sign_node.uploaders.base import UploadError
@@ -17,7 +18,8 @@ class TestPulpRpmUploader(TestCase):
     def setUp(self):
         self.setUpPyfakefs()
         session_patcher = patch('sign_node.uploaders.pulp.PulpSession')
-        self.session = session_patcher.start().return_value
+        self.session_class = session_patcher.start()
+        self.session = self.session_class.return_value
         self.addCleanup(session_patcher.stop)
         # authenticate() must return the client it was given
         self.session.authenticate.side_effect = lambda client: client
@@ -55,7 +57,7 @@ class TestPulpRpmUploader(TestCase):
             def __init__(self, *_, **__):
                 pass
 
-            def list(_, sha256):
+            def list(_, sha256, **__):
                 assert sha256 in self.file_map
                 data = Mock()
                 data.pulp_href = self.file_map[sha256].href
@@ -89,17 +91,17 @@ class TestPulpRpmUploader(TestCase):
             def __init__(self, *_, **__):
                 pass
 
-            def create(_, opts):
+            def create(_, opts, **__):
                 assert opts['size'] == f_size
                 response = Mock()
                 response.pulp_href = f_href
                 return response
 
-            def update(_, content_range, upload_href, file):
+            def update(_, content_range, upload_href, file, **__):
                 assert upload_href == f_href
                 assert file == f_path
 
-            def commit(_, upload_href, upload_commit):
+            def commit(_, upload_href, upload_commit, **__):
                 assert upload_href == f_href
                 assert upload_commit['sha256'] == f_hash
                 response = Mock()
@@ -112,7 +114,7 @@ class TestPulpRpmUploader(TestCase):
             def __init__(self, *_, **__):
                 pass
 
-            def read(self, task_href):
+            def read(self, task_href, **__):
                 assert task_href == self.TASK_HREF
                 result = Mock()
                 result.created_resources = [f_href]
@@ -141,14 +143,14 @@ class TestPulpRpmUploader(TestCase):
             def __init__(self, *_, **__):
                 pass
 
-            def create(_, opts):
+            def create(_, opts, **__):
                 raise AssertionError('small RPM must not be chunked')
 
         class ContentPackagesApi:
             def __init__(self, *_, **__):
                 pass
 
-            def upload(_, file=None, upload=None):
+            def upload(_, file=None, upload=None, **__):
                 assert file == f_path
                 assert upload is None
                 response = Mock()
@@ -181,27 +183,27 @@ class TestPulpRpmUploader(TestCase):
             def __init__(self, *_, **__):
                 pass
 
-            def create(_, opts):
+            def create(_, opts, **__):
                 assert opts['size'] == f_size
                 response = Mock()
                 response.pulp_href = upload_href
                 return response
 
-            def update(_, content_range, upload_href_, file):
+            def update(_, content_range, upload_href_, file, **__):
                 assert upload_href_ == upload_href
                 updated_chunks.append(content_range)
 
-            def commit(_, upload_href, upload_commit):
+            def commit(_, upload_href, upload_commit, **__):
                 raise AssertionError('RPM upload must not be committed')
 
-            def delete(_, upload_href_):
+            def delete(_, upload_href_, **__):
                 deleted_uploads.append(upload_href_)
 
         class ContentPackagesApi:
             def __init__(self, *_, **__):
                 pass
 
-            def upload(_, file=None, upload=None):
+            def upload(_, file=None, upload=None, **__):
                 assert file is None
                 assert upload == upload_href
                 response = Mock()
@@ -233,7 +235,7 @@ class TestPulpRpmUploader(TestCase):
             def __init__(self, *_, **__):
                 pass
 
-            def upload(_, file=None, upload=None):
+            def upload(_, file=None, upload=None, **__):
                 response = Mock()
                 response.pulp_href = 'rpm_href'
                 response.sha256 = 'other'
@@ -257,22 +259,22 @@ class TestPulpRpmUploader(TestCase):
             def __init__(self, *_, **__):
                 pass
 
-            def create(_, opts):
+            def create(_, opts, **__):
                 response = Mock()
                 response.pulp_href = upload_href
                 return response
 
-            def update(_, content_range, upload_href_, file):
+            def update(_, content_range, upload_href_, file, **__):
                 pass
 
-            def delete(_, upload_href_):
+            def delete(_, upload_href_, **__):
                 deleted_uploads.append(upload_href_)
 
         class ContentPackagesApi:
             def __init__(self, *_, **__):
                 pass
 
-            def upload(_, file=None, upload=None):
+            def upload(_, file=None, upload=None, **__):
                 raise RuntimeError('RPM file cannot be parsed for metadata')
 
         with (
@@ -300,22 +302,22 @@ class TestPulpRpmUploader(TestCase):
             def __init__(self, *_, **__):
                 pass
 
-            def create(_, opts):
+            def create(_, opts, **__):
                 response = Mock()
                 response.pulp_href = upload_href
                 return response
 
-            def update(_, content_range, upload_href_, file):
+            def update(_, content_range, upload_href_, file, **__):
                 pass
 
-            def delete(_, upload_href_):
+            def delete(_, upload_href_, **__):
                 raise RuntimeError('Pulp is unavailable')
 
         class ContentPackagesApi:
             def __init__(self, *_, **__):
                 pass
 
-            def upload(_, file=None, upload=None):
+            def upload(_, file=None, upload=None, **__):
                 response = Mock()
                 response.pulp_href = f_href
                 response.sha256 = f_hash
@@ -360,24 +362,76 @@ class TestPulpRpmUploader(TestCase):
         with patch.object(
             PulpRpmUploader,
             '_send_file',
-            side_effect=ApiException(status=500),
+            side_effect=ApiException(status=400),
         ) as send_file:
             with self.assertRaises(ApiException):
                 uploader.upload_single_file('/build_dir/package.rpm')
         send_file.assert_called_once()
         self.session.login.assert_not_called()
 
-    def test_upload_relogins_only_once(self):
-        uploader = PulpRpmUploader('localhost', 'user', 'password', 42)
+    @patch('sign_node.uploaders.pulp.time.sleep')
+    def test_upload_retries_transient_errors(self, sleep):
+        uploader = PulpRpmUploader(
+            'localhost', 'user', 'password', 42, upload_retries=3
+        )
         with patch.object(
             PulpRpmUploader,
             '_send_file',
-            side_effect=[ApiException(status=401), ApiException(status=401)],
+            side_effect=[
+                ReadTimeoutError(None, '/pulp', 'Read timed out'),
+                ProtocolError('Connection reset by peer'),
+                RpmApiException(status=503),
+                ('sha256', 'href'),
+            ],
+        ) as send_file:
+            artifact = uploader.upload_single_file('/build_dir/package.rpm')
+        assert artifact.href == 'href'
+        assert send_file.call_count == 4
+        # The delay grows with every attempt
+        assert [c.args[0] for c in sleep.call_args_list] == [10, 20, 30]
+        self.session.login.assert_not_called()
+
+    @patch('sign_node.uploaders.pulp.time.sleep')
+    def test_upload_gives_up_after_retries(self, sleep):
+        uploader = PulpRpmUploader(
+            'localhost', 'user', 'password', 42, upload_retries=2
+        )
+        with patch.object(
+            PulpRpmUploader,
+            '_send_file',
+            side_effect=ApiException(status=502),
         ) as send_file:
             with self.assertRaises(ApiException):
                 uploader.upload_single_file('/build_dir/package.rpm')
-        assert send_file.call_count == 2
-        self.session.login.assert_called_once()
+        assert send_file.call_count == 3
+        assert sleep.call_count == 2
+
+    def test_requests_have_a_timeout(self):
+        with (
+            patch('sign_node.uploaders.pulp.UploadsApi') as uploads,
+            patch('sign_node.uploaders.pulp.TasksApi') as tasks,
+            patch('sign_node.uploaders.pulp.ArtifactsApi') as artifacts,
+            patch('sign_node.uploaders.pulp.ContentPackagesApi') as packages,
+        ):
+            uploader = PulpRpmUploader(
+                'localhost', 'user', 'password', 42, requests_timeout=7
+            )
+            artifacts().list.return_value.results = []
+            tasks().read.return_value.state = 'completed'
+            uploader._send_file('/build_dir/build.log')
+            uploader._post_rpm_chunked('/build_dir/package.rpm')
+        calls = [
+            call
+            for client in (uploads, tasks, artifacts, packages)
+            for call in client().method_calls
+        ]
+        # list, create, update, commit, read, create, update, upload, delete
+        assert len(calls) == 9
+        for call in calls:
+            assert call.kwargs['_request_timeout'] == 7, call
+        self.session_class.assert_called_once_with(
+            'localhost', 'user', 'password', requests_timeout=7
+        )
 
     def test_clients_use_the_session(self):
         uploader = PulpRpmUploader('localhost', 'user', 'password', 42)
@@ -389,3 +443,6 @@ class TestPulpRpmUploader(TestCase):
             # No credentials, so the SDK sends no Basic auth
             assert client.configuration.username is None
             assert client.configuration.password is None
+            # Failed files are started over, urllib3 must not re-send
+            # single requests (a repeated PUT duplicates a chunk)
+            assert client.configuration.retries.total is False

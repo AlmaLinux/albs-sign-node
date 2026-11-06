@@ -54,6 +54,11 @@ class SignStatusEnum(enum.IntEnum):
     WRONG_SIGNATURE = 4
     NO_FILE_SIGNATURE = 5
 
+# Attempts to report a finished task to the master, the delay grows
+# with every one of them
+REPORT_RETRIES = 5
+REPORT_RETRY_DELAY = 30  # seconds
+
 
 class Signer(object):
     def __init__(self, config, password_db, gpg):
@@ -65,6 +70,8 @@ class Signer(object):
             self.__config.pulp_user,
             self.__config.pulp_password,
             self.__config.pulp_chunk_size,
+            requests_timeout=self.__config.pulp_timeout,
+            upload_retries=self.__config.pulp_upload_retries,
         )
         self.__working_dir_path = Path(self.__config.working_dir)
         self.__download_credentials = {
@@ -644,8 +651,26 @@ class Signer(object):
         task_id : str
             Sign task identifier.
         """
-        response = self.__call_master(f'{task_id}/complete',
-                                      **response_payload)
+        # The master only queues the processing of a report, so repeating
+        # it is harmless, while a lost one leaves the task in progress
+        # forever. Other calls to the master are not retried: claiming a
+        # task or completing a key generation twice is not harmless.
+        for attempt in range(1, REPORT_RETRIES + 2):
+            try:
+                response = self.__call_master(f'{task_id}/complete',
+                                              **response_payload)
+                break
+            except requests.RequestException as err:
+                status = getattr(err.response, 'status_code', None)
+                if (status and status < 500) or attempt > REPORT_RETRIES:
+                    raise
+                delay = REPORT_RETRY_DELAY * attempt
+                logging.warning(
+                    'Cannot report task %s (attempt %d of %d), '
+                    'retrying in %d s: %s',
+                    task_id, attempt, REPORT_RETRIES + 1, delay, err,
+                )
+                time.sleep(delay)
         if not response['success']:
             raise Exception(
                 'Server side error: {0}'.format(

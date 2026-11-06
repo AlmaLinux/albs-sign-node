@@ -1,4 +1,5 @@
 from http.cookies import SimpleCookie
+from typing import Optional
 
 from pulpcore.client.pulpcore import LoginApi
 from pulpcore.client.pulpcore.api_client import ApiClient
@@ -14,7 +15,13 @@ class PulpSession:
     Logs in to Pulp once and authenticates API clients with the session.
     """
 
-    def __init__(self, host: str, username: str, password: str):
+    def __init__(
+        self,
+        host: str,
+        username: str,
+        password: str,
+        requests_timeout: Optional[int] = None,
+    ):
         """
         Parameters
         ----------
@@ -24,10 +31,13 @@ class PulpSession:
             User name to authenticate in Pulp.
         password : str
             User password.
+        requests_timeout : int or None
+            Timeout of the login request.
         """
         self._host = host.rstrip("/")
         self._username = username
         self._password = password
+        self._requests_timeout = requests_timeout
         # Every authenticated client, so a re-login updates all of them
         self._api_clients = []
         self.login()
@@ -45,7 +55,9 @@ class PulpSession:
         )
         # login() and login_with_http_info() keep only one of the two
         # Set-Cookie headers, so read them from the raw response
-        response = LoginApi(login_client).login_without_preload_content()
+        response = LoginApi(login_client).login_without_preload_content(
+            _request_timeout=self._requests_timeout
+        )
         try:
             if response.status != 201:
                 raise UploadError(f"Pulp login failed: HTTP {response.status}")
