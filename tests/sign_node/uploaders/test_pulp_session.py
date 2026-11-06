@@ -35,11 +35,12 @@ class TestPulpSession(TestCase):
         client.set_default_header.assert_any_call('Referer', 'http://pulp/')
 
     def test_login_uses_basic_auth(self):
-        PulpSession('http://pulp', 'user', 'password')
+        PulpSession('http://pulp', 'user', 'password', requests_timeout=10)
         login_client = self.login_api.call_args.args[0]
         assert login_client.configuration.host == 'http://pulp'
         assert login_client.configuration.username == 'user'
         assert login_client.configuration.password == 'password'
+        self.login.assert_called_once_with(_request_timeout=10)
         self.login.return_value.release_conn.assert_called_once()
 
     def test_failed_login(self):

@@ -4,13 +4,14 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
+import requests
 import rpm
 from pyfakefs.fake_filesystem_unittest import TestCase
 
 import sign_node
 from sign_node.config import SignNodeConfig
 from sign_node.errors import SignError
-from sign_node.signer import Signer
+from sign_node.signer import REPORT_RETRIES, Signer
 
 REGULAR_FILE_MODE = stat.S_IFREG | 0o644
 DIRECTORY_MODE = stat.S_IFDIR | 0o755
@@ -357,3 +358,49 @@ class TestSignBuildFilesSignatureGuard(TestCase):
 
         assert 'sign_files=false' not in payload['error_message']
         download.assert_called()
+
+
+class TestReportSignedBuild(TestCase):
+    """
+    A report is retried because a lost one leaves the task in progress
+    on the master forever, and the master only queues its processing.
+    """
+
+    def setUp(self):
+        self.setUpPyfakefs()
+        self.signer = Signer(SignNodeConfig(), 'password', None)
+
+    @staticmethod
+    def http_error(status):
+        response = MagicMock(status_code=status)
+        return requests.HTTPError(response=response)
+
+    def report(self, *responses):
+        with (
+            patch.object(
+                Signer, '_Signer__call_master', side_effect=responses
+            ) as self.call_master,
+            patch('sign_node.signer.time.sleep') as self.sleep,
+        ):
+            self.signer._report_signed_build(6, {'success': True})
+
+    def test_retried_after_timeout_and_server_error(self):
+        self.report(
+            requests.ReadTimeout('Read timed out'),
+            requests.ConnectionError('Connection refused'),
+            self.http_error(503),
+            {'success': True},
+        )
+        assert self.call_master.call_count == 4
+        assert [c.args[0] for c in self.sleep.call_args_list] == [30, 60, 90]
+
+    def test_not_retried_on_client_error(self):
+        with self.assertRaises(requests.HTTPError):
+            self.report(self.http_error(400), {'success': True})
+        assert self.call_master.call_count == 1
+
+    def test_gives_up_after_retries(self):
+        errors = [requests.ReadTimeout('Read timed out')] * (REPORT_RETRIES + 2)
+        with self.assertRaises(requests.ReadTimeout):
+            self.report(*errors)
+        assert self.call_master.call_count == REPORT_RETRIES + 1
