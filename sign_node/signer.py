@@ -529,6 +529,7 @@ class Signer(object):
                     yubikey_keyids=self.__config.yubikey_keyids,
                     key_workers=self.__config.sign_key_workers,
                     prepare_workers=self.__config.sign_prepare_workers,
+                    retries=self.__config.sign_retries,
                 )
             finish_time = datetime.utcnow()
             stats['sign_packages_time'] = self.timedelta_seconds(

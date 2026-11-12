@@ -6,6 +6,8 @@ import contextlib
 import logging
 import os
 import tempfile
+import threading
+import time
 import traceback
 from concurrent.futures import ThreadPoolExecutor
 from typing import List, Optional
@@ -31,6 +33,31 @@ import plumbum
 
 class PackageSignError(Exception):
     pass
+
+
+SIGN_RETRY_DELAY = 5
+_scdaemon_lock = threading.Lock()
+_scdaemon_restarts = 0
+
+
+def _restart_scdaemon(seen_restarts: int):
+    """
+    Stops scdaemon, gpg-agent starts a new one on the next signature.
+
+    Another user of the YubiKey (PIV, for example) resets the card under
+    scdaemon, which then answers "Card removed" or "General error" until
+    it scans the readers again. gpg-agent itself is left alone, other
+    processes may be signing through it. ``seen_restarts`` is the counter
+    value from before the failed attempt: a signature that failed because
+    another thread has just restarted scdaemon must not restart it again.
+    """
+    global _scdaemon_restarts
+    with _scdaemon_lock:
+        if seen_restarts == _scdaemon_restarts:
+            plumbum.local['gpgconf'].run(
+                args=['--kill', 'scdaemon'], retcode=None
+            )
+            _scdaemon_restarts += 1
 
 
 @contextlib.contextmanager
@@ -72,6 +99,7 @@ def sign_rpm_package(
     yubikey_keyids: Optional[List[str]] = None,
     delete_old_signatures: bool = True,
     with_locks: bool = True,
+    retries: int = 3,
 ):
     """
     Signs an RPM package.
@@ -98,6 +126,8 @@ def sign_rpm_package(
     with_locks : bool
         Take the gpg locks around the signing command (default).
         ``sign_rpm_packages`` holds them for the whole batch instead.
+    retries : int
+        Number of additional attempts after a failed signing command.
 
     Raises
     ------
@@ -123,13 +153,29 @@ def sign_rpm_package(
             yubikey_keyids=yubikey_keyids,
         )
     with locks:
-        out, status = pexpect.run(
-            command=final_cmd,
-            events={"Enter passphrase:.*": f"{password}\r"},
-            env={"LC_ALL": "en_US.UTF-8"},
-            timeout=100000,
-            withexitstatus=True,
-        )
+        for attempt in range(1, retries + 2):
+            seen_restarts = _scdaemon_restarts
+            out, status = pexpect.run(
+                command=final_cmd,
+                events={"Enter passphrase:.*": f"{password}\r"},
+                env={"LC_ALL": "en_US.UTF-8"},
+                timeout=100000,
+                withexitstatus=True,
+            )
+            if not status or attempt > retries:
+                break
+            logging.warning(
+                'The RPM signing command failed with %s exit code '
+                '(attempt %d of %d), restarting scdaemon and retrying.'
+                '\nCommand: %s\nOutput:\n%s',
+                status,
+                attempt,
+                retries + 1,
+                final_cmd,
+                out,
+            )
+            _restart_scdaemon(seen_restarts)
+            time.sleep(SIGN_RETRY_DELAY * attempt)
     if status is None:
         message = (
             f"The RPM signing command is failed with timeout."
@@ -230,6 +276,7 @@ def sign_rpm_packages(
     yubikey_keyids: Optional[List[str]] = None,
     key_workers: int = 2,
     prepare_workers: Optional[int] = None,
+    retries: int = 3,
 ):
     """
     Signs RPM packages in two overlapping phases.
@@ -262,6 +309,8 @@ def sign_rpm_packages(
         Number of packages signed with the real key concurrently.
     prepare_workers : int, optional
         Number of preparation threads, defaults to the CPU count.
+    retries : int
+        Number of additional attempts to sign a package with the real key.
 
     Raises
     ------
@@ -293,6 +342,7 @@ def sign_rpm_packages(
                 password,
                 delete_old_signatures=False,
                 with_locks=False,
+                retries=retries,
             )
 
         try:

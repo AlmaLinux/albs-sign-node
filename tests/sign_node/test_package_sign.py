@@ -2,6 +2,7 @@ from unittest.mock import patch, MagicMock
 
 import pytest
 
+from sign_node import package_sign
 from sign_node.package_sign import (
     PackageSignError,
     sign_rpm_package,
@@ -22,7 +23,7 @@ def test_sign_rpm_package(plumbum):
 
     with patch(pexpect_run, return_value=(None, 1)):
         with pytest.raises(PackageSignError):
-            sign_rpm_package('path', 'keyid', 'password')
+            sign_rpm_package('path', 'keyid', 'password', retries=0)
 
     with patch(pexpect_run, return_value=(None, 0)):
         sign_rpm_package('path', 'keyid', 'password')
@@ -87,5 +88,45 @@ def test_sign_rpm_packages(plumbum, gnupg, tmp_path):
     with patch('sign_node.package_sign.pexpect.run', return_value=(None, 1)):
         with pytest.raises(PackageSignError):
             sign_rpm_packages(
-                paths, 'keyid', 'password', locks_dir_path=str(tmp_path)
+                paths,
+                'keyid',
+                'password',
+                locks_dir_path=str(tmp_path),
+                retries=0,
             )
+
+
+@patch('sign_node.package_sign.time.sleep')
+@patch('sign_node.package_sign.plumbum')
+def test_sign_rpm_package_retries(plumbum, sleep):
+    pexpect_run = 'sign_node.package_sign.pexpect.run'
+    gpgconf = MagicMock()
+    plumbum.local = {'gpgconf': gpgconf}
+    sign = dict(delete_old_signatures=False, with_locks=False, retries=2)
+
+    # the card comes back after scdaemon is restarted
+    with patch(pexpect_run, side_effect=[(b'', 1), (b'', 1), (b'', 0)]) as run:
+        sign_rpm_package('path', 'keyid', 'password', **sign)
+    assert run.call_count == 3
+    assert [c.kwargs['args'] for c in gpgconf.run.call_args_list] == [
+        ['--kill', 'scdaemon']
+    ] * 2
+    assert [c.args[0] for c in sleep.call_args_list] == [5, 10]
+
+    # the attempts are limited
+    with patch(pexpect_run, return_value=(b'', 1)) as run:
+        with pytest.raises(PackageSignError):
+            sign_rpm_package('path', 'keyid', 'password', **sign)
+    assert run.call_count == 3
+
+    # a failure caused by a restart made by another thread does not
+    # restart scdaemon once more
+    gpgconf.run.reset_mock()
+
+    def restarted_meanwhile(**_):
+        package_sign._restart_scdaemon(package_sign._scdaemon_restarts)
+        return (b'', 1) if gpgconf.run.call_count == 1 else (b'', 0)
+
+    with patch(pexpect_run, side_effect=restarted_meanwhile):
+        sign_rpm_package('path', 'keyid', 'password', **sign)
+    assert gpgconf.run.call_count == 2
