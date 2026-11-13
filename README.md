@@ -63,6 +63,8 @@ pulp_timeout: 45
 # How many times a file upload is started over after a connection error,
 # a timeout or a 5xx response from Pulp.
 pulp_upload_retries: 3
+# How many chunks of one large file are uploaded in parallel.
+pulp_chunk_workers: 4
 ```
 
 # Fetching GPG passphrases from Bitwarden

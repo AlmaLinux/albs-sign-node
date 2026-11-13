@@ -1,13 +1,10 @@
-import csv
 import logging
 import os
-import tempfile
 import time
-import shutil
 import typing
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import List
 
-from fsplit.filesplit import Filesplit
 from pulpcore.client.pulp_rpm import ApiClient as RpmApiClient
 from pulpcore.client.pulp_rpm import Configuration as RpmConfiguration
 from pulpcore.client.pulp_rpm import ContentPackagesApi, RpmPackageResponse
@@ -21,6 +18,7 @@ from pulpcore.client.pulpcore.api.artifacts_api import ArtifactsApi
 from urllib3.exceptions import HTTPError
 from urllib3.util.retry import Retry
 
+from sign_node.config import DEFAULT_PULP_CHUNK_WORKERS
 from sign_node.uploaders.base import BaseUploader, UploadError
 from sign_node.uploaders.pulp_session import PulpSession
 from sign_node.utils.file_utils import hash_file
@@ -55,6 +53,7 @@ class PulpBaseUploader(BaseUploader):
         chunk_size: int,
         requests_timeout: int = DEFAULT_TIMEOUT,
         upload_retries: int = DEFAULT_UPLOAD_RETRIES,
+        chunk_workers: int = DEFAULT_PULP_CHUNK_WORKERS,
     ):
         """
         Initiate uploader.
@@ -74,6 +73,9 @@ class PulpBaseUploader(BaseUploader):
         upload_retries : int
             How many times a file upload is started over after a
             connection error, a timeout or a server error.
+        chunk_workers : int
+            Maximum number of chunks of one large file uploaded in
+            parallel.
         """
         self._requests_timeout = requests_timeout
         self._upload_retries = upload_retries
@@ -84,7 +86,7 @@ class PulpBaseUploader(BaseUploader):
         self._uploads_client = UploadsApi(api_client=api_client)
         self._tasks_client = TasksApi(api_client=api_client)
         self._artifacts_client = ArtifactsApi(api_client=api_client)
-        self._file_splitter = Filesplit()
+        self._chunk_workers = chunk_workers
         self._chunk_size = chunk_size
         self._logger = logging.getLogger(__file__)
 
@@ -187,31 +189,79 @@ class PulpBaseUploader(BaseUploader):
         task_result = self._wait_for_task_completion(response.task)
         return task_result.created_resources[0]
 
+    def _put_chunk(
+        self, file_path: str, reference: str, offset: int, total_size: int
+    ):
+        """
+        Sends one chunk of the file to the upload.
+
+        Parameters
+        ----------
+        file_path : str
+            Path to the file.
+        reference : str
+            Upload reference in Pulp.
+        offset : int
+            Position of the chunk in the file.
+        total_size : int
+            Size of the whole file.
+
+        """
+        expected = min(self._chunk_size, total_size - offset)
+        with open(file_path, 'rb') as f:
+            f.seek(offset)
+            chunk = f.read(expected)
+        # The range is the expected one: if the file got shorter, Pulp
+        # rejects the chunk because its size does not match the range
+        self._uploads_client.update(
+            f'bytes {offset}-{offset + expected - 1}/{total_size}',
+            reference,
+            (os.path.basename(file_path), chunk),
+            _request_timeout=self._requests_timeout,
+        )
+
     def _put_large_file(self, file_path: str, reference: str):
-        temp_dir = tempfile.mkdtemp(prefix="pulp_uploader_")
+        """
+        Sends the file to the upload in chunks of self._chunk_size bytes,
+        up to self._chunk_workers of them at once. Pulp accepts the chunks
+        in any order.
+
+        Parameters
+        ----------
+        file_path : str
+            Path to the file.
+        reference : str
+            Upload reference in Pulp.
+
+        """
+        start = time.monotonic()
+        total_size = os.path.getsize(file_path)
+        offsets = range(0, total_size, self._chunk_size)
+        workers = min(self._chunk_workers, len(offsets))
+        executor = ThreadPoolExecutor(
+            max_workers=workers, thread_name_prefix='pulp_chunk'
+        )
         try:
-            lower_bytes_limit = 0
-            total_size = os.path.getsize(file_path)
-            self._file_splitter.split(
-                file_path, self._chunk_size, output_dir=temp_dir
-            )
-            manifest_path = os.path.join(temp_dir, 'fs_manifest.csv')
-            for meta in csv.DictReader(open(manifest_path, 'r')):
-                split_file_path = os.path.join(temp_dir, meta['filename'])
-                upper_bytes_limit = (
-                    lower_bytes_limit + int(meta['filesize']) - 1
+            futures = [
+                executor.submit(
+                    self._put_chunk, file_path, reference, offset, total_size
                 )
-                self._uploads_client.update(
-                    f'bytes {lower_bytes_limit}-{upper_bytes_limit}/'
-                    f'{total_size}',
-                    reference,
-                    split_file_path,
-                    _request_timeout=self._requests_timeout,
-                )
-                lower_bytes_limit += int(meta['filesize'])
+                for offset in offsets
+            ]
+            for future in as_completed(futures):
+                future.result()
         finally:
-            if temp_dir and os.path.exists(temp_dir):
-                shutil.rmtree(temp_dir)
+            # On an error, do not send the remaining chunks: the whole
+            # file is started over with a new upload
+            executor.shutdown(wait=True, cancel_futures=True)
+        self._logger.info(
+            "Sent %s (%d bytes) in %d chunks, %d at once, in %.2f s",
+            os.path.basename(file_path),
+            total_size,
+            len(offsets),
+            workers,
+            time.monotonic() - start,
+        )
 
     def _send_file(self, file_path: str) -> typing.Tuple[str, str]:
         file_sha256 = hash_file(file_path, hash_type="sha256")

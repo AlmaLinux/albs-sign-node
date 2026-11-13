@@ -1,5 +1,7 @@
 import operator
 import os
+import threading
+import time
 from unittest.mock import Mock, patch
 
 from pulpcore.client.pulp_rpm.exceptions import ApiException as RpmApiException
@@ -7,6 +9,7 @@ from pulpcore.client.pulpcore.exceptions import ApiException
 from pyfakefs.fake_filesystem_unittest import TestCase
 from urllib3.exceptions import ProtocolError, ReadTimeoutError
 
+from sign_node.config import DEFAULT_PULP_CHUNK_WORKERS
 from sign_node.models import Artifact
 from sign_node.uploaders.base import UploadError
 from sign_node.uploaders.pulp import PulpRpmUploader
@@ -45,6 +48,23 @@ class TestPulpRpmUploader(TestCase):
             )
             self.file_map[hsh] = artifact
             self.file_lst.append(artifact)
+
+    def assert_chunks(self, chunks, file_path, chunk_size):
+        with open(file_path, 'rb') as f:
+            content = f.read()
+        size = len(content)
+        name = os.path.basename(file_path)
+        # Chunks are sent in parallel, so in any order
+        chunks = sorted(
+            chunks, key=lambda c: int(c[0].split()[1].split('-')[0])
+        )
+        assert chunks == [
+            (
+                f'bytes {start}-{min(start + chunk_size, size) - 1}/{size}',
+                (name, content[start:start + chunk_size]),
+            )
+            for start in range(0, size, chunk_size)
+        ]
 
     def test_get_artifacts_list(self):
         uploader = PulpRpmUploader('localhost', 'user', 'password', 42)
@@ -191,7 +211,7 @@ class TestPulpRpmUploader(TestCase):
 
             def update(_, content_range, upload_href_, file, **__):
                 assert upload_href_ == upload_href
-                updated_chunks.append(content_range)
+                updated_chunks.append((content_range, file))
 
             def commit(_, upload_href, upload_commit, **__):
                 raise AssertionError('RPM upload must not be committed')
@@ -224,7 +244,7 @@ class TestPulpRpmUploader(TestCase):
             file_sha256, package_href = uploader._send_file(f_path)
             assert file_sha256 == f_hash
             assert package_href == f_href
-            assert len(updated_chunks) == 2
+            self.assert_chunks(updated_chunks, f_path, f_size - 1)
             assert deleted_uploads == [upload_href]
 
     def test_send_rpm_checksum_mismatch(self):
@@ -446,3 +466,70 @@ class TestPulpRpmUploader(TestCase):
             # Failed files are started over, urllib3 must not re-send
             # single requests (a repeated PUT duplicates a chunk)
             assert client.configuration.retries.total is False
+
+    def make_chunk_uploader(self, chunk_size, chunk_workers, update):
+        with patch('sign_node.uploaders.pulp.UploadsApi') as uploads:
+            uploads.return_value.update.side_effect = update
+            return PulpRpmUploader(
+                'localhost',
+                'user',
+                'password',
+                chunk_size,
+                chunk_workers=chunk_workers,
+            )
+
+    def test_put_large_file_parallel(self):
+        f_path = '/build_dir/big.rpm'
+        self.fs.create_file(f_path, contents=os.urandom(1000))
+        lock = threading.Lock()
+        sent = []
+        threads = set()
+        running = 0
+        max_running = 0
+
+        def update(content_range, upload_href, file, **__):
+            nonlocal running, max_running
+            assert upload_href == 'upload1'
+            with lock:
+                running += 1
+                max_running = max(max_running, running)
+                threads.add(threading.current_thread().name)
+            # Long enough for the other workers to start their chunks
+            time.sleep(0.01)
+            with lock:
+                running -= 1
+                sent.append((content_range, file))
+
+        uploader = self.make_chunk_uploader(64, 3, update)
+        uploader._put_large_file(f_path, 'upload1')
+        # 15 full chunks and the remaining 40 bytes
+        assert len(sent) == 16
+        self.assert_chunks(sent, f_path, 64)
+        assert max_running == 3
+        assert all(name.startswith('pulp_chunk') for name in threads)
+
+    def test_put_large_file_stops_on_chunk_error(self):
+        f_path = '/build_dir/big.rpm'
+        self.fs.create_file(f_path, contents=os.urandom(64 * 100))
+        lock = threading.Lock()
+        calls = 0
+
+        def update(content_range, upload_href, file, **__):
+            nonlocal calls
+            with lock:
+                calls += 1
+                first = calls == 1
+            if first:
+                raise ApiException(status=500)
+            time.sleep(0.01)
+
+        uploader = self.make_chunk_uploader(64, 2, update)
+        with self.assertRaises(ApiException):
+            uploader._put_large_file(f_path, 'upload1')
+        # The pending chunks are cancelled, at most the ones already
+        # running finish
+        assert calls < 10
+
+    def test_chunk_workers_default_from_config(self):
+        uploader = PulpRpmUploader('localhost', 'user', 'password', 42)
+        assert uploader._chunk_workers == DEFAULT_PULP_CHUNK_WORKERS
