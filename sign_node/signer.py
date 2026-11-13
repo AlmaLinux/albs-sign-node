@@ -72,6 +72,7 @@ class Signer(object):
             self.__config.pulp_chunk_size,
             requests_timeout=self.__config.pulp_timeout,
             upload_retries=self.__config.pulp_upload_retries,
+            chunk_workers=self.__config.pulp_chunk_workers,
         )
         self.__working_dir_path = Path(self.__config.working_dir)
         self.__download_credentials = {
